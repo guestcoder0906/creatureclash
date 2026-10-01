@@ -51,7 +51,7 @@ const App: React.FC = () => {
         return;
     }
 
-    if (gameState.currentPlayer === aiId && gameState.phase !== 'end' && !gameState.pendingReaction) {
+    if (gameState.currentPlayer === aiId && gameState.phase !== 'end' && !gameState.pendingReaction && !gameState.activeCoinFlip) {
       // It's AI's turn
       if (aiTurnTimeoutRef.current) clearTimeout(aiTurnTimeoutRef.current);
       
@@ -64,7 +64,7 @@ const App: React.FC = () => {
              dispatch(actions[i]);
              i++;
              if (i < actions.length) {
-                aiTurnTimeoutRef.current = setTimeout(executeNext, 1500);
+                aiTurnTimeoutRef.current = setTimeout(executeNext, 1800);
              }
           }
         };
@@ -75,7 +75,7 @@ const App: React.FC = () => {
     return () => {
       if (aiTurnTimeoutRef.current) clearTimeout(aiTurnTimeoutRef.current);
     };
-  }, [gameState?.currentPlayer, gameState?.turn, gameState?.pendingReaction]); 
+  }, [gameState?.currentPlayer, gameState?.turn, gameState?.pendingReaction, !!gameState?.activeCoinFlip]); 
 
   const prepareGame = () => {
     const myId = 'local-player';

@@ -257,7 +257,7 @@ export const gameReducer = (state: GS, action: GA): GS => {
      }
 
      newState.activeCoinFlip = {
-        id: Math.random().toString(36),
+        id: `flip_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
         result: isHeads ? 'Heads' : 'Tails',
         reason,
         timestamp: Date.now()
@@ -650,6 +650,7 @@ export const gameReducer = (state: GS, action: GA): GS => {
             }
             if (def.id === CID.ExhaustingRoar) {
                 if (performCoinFlip('Exhaust Roar', getRNG(rng, rngIndex++), p.id)) {
+                    addStatus(target, { type: 'StaminaDebt' });
                     target.stamina = Math.max(0, target.stamina - 1);
                     log(`${target.name} lost stamina from Roar.`);
                 }
@@ -738,14 +739,13 @@ export const gameReducer = (state: GS, action: GA): GS => {
            }
       }
 
-      if (nextPlayer.stamina < nextPlayer.maxStamina) {
-        nextPlayer.stamina += 1;
-      }
+      // Refresh stamina at start of turn to full max stamina (Small: 4, Medium: 3, Big: 2)
+      nextPlayer.stamina = Math.max(nextPlayer.stamina, nextPlayer.maxStamina);
 
       if (nextPlayer.statuses.some(s => s.type === 'StaminaDebt')) {
           nextPlayer.stamina = Math.max(0, nextPlayer.stamina - 1);
-          log(`${nextPlayer.name} lost 1 Stamina from Adrenaline Rush debt.`);
-          notify(`${nextPlayer.name} lost 1 Stamina (Adrenaline Rush Debt)`, 'warning');
+          log(`${nextPlayer.name} lost 1 Stamina from Stamina debt.`);
+          notify(`${nextPlayer.name} has -1 Stamina (Debt)`, 'warning');
           nextPlayer.statuses = nextPlayer.statuses.filter(s => s.type !== 'StaminaDebt');
       }
 

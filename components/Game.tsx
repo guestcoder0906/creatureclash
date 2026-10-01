@@ -344,19 +344,52 @@ export const Game: React.FC<GameProps> = ({ state, playerId, dispatch, onExit })
 
   const habitatStyle = habitatConfig[state.habitat];
 
-  const CoinFlipOverlay = ({ event }: { event: CoinFlipEvent }) => {
+  const CoinFlipOverlay: React.FC<{ event: CoinFlipEvent }> = ({ event }) => {
     const [visibleResult, setVisibleResult] = useState<'FLIPPING' | 'HEADS' | 'TAILS'>('FLIPPING');
     const [rotation, setRotation] = useState(0);
+    const dismissedRef = useRef(false);
 
     useEffect(() => {
-        const interval = setInterval(() => { setRotation(r => r + 720); }, 100);
-        const t1 = setTimeout(() => { clearInterval(interval); setRotation(0); setVisibleResult(event.result.toUpperCase() as 'HEADS' | 'TAILS'); }, 1500);
-        const t2 = setTimeout(() => { dispatch({ type: 'ACKNOWLEDGE_COIN_FLIP' }); }, 3500);
-        return () => { clearInterval(interval); clearTimeout(t1); clearTimeout(t2); }
-    }, [event]);
+        dismissedRef.current = false;
+        setVisibleResult('FLIPPING');
+        setRotation(0);
+
+        const interval = setInterval(() => { 
+          setRotation(r => r + 720); 
+        }, 100);
+
+        const t1 = setTimeout(() => { 
+          clearInterval(interval); 
+          setRotation(0); 
+          setVisibleResult(event.result.toUpperCase() as 'HEADS' | 'TAILS'); 
+        }, 1200);
+
+        const t2 = setTimeout(() => { 
+          if (!dismissedRef.current) {
+            dismissedRef.current = true;
+            dispatch({ type: 'ACKNOWLEDGE_COIN_FLIP' }); 
+          }
+        }, 2600);
+
+        return () => { 
+          clearInterval(interval); 
+          clearTimeout(t1); 
+          clearTimeout(t2); 
+        };
+    }, [event.id]);
+
+    const handleDismiss = () => {
+      if (!dismissedRef.current) {
+        dismissedRef.current = true;
+        dispatch({ type: 'ACKNOWLEDGE_COIN_FLIP' });
+      }
+    };
 
     return (
-      <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-black/80 backdrop-blur-md animate-fade-in px-4">
+      <div 
+        className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-black/80 backdrop-blur-md animate-fade-in px-4 cursor-pointer select-none"
+        onClick={handleDismiss}
+      >
         <div className="text-2xl md:text-5xl text-amber-400 font-black mb-8 tracking-widest uppercase shadow-black drop-shadow-[0_5px_5px_rgba(0,0,0,1)] text-center break-words">{event.reason}</div>
         <div className="relative w-40 h-40 md:w-64 md:h-64 perspective-1000">
              <div className={`w-full h-full transition-transform duration-500 transform-style-3d ${visibleResult === 'FLIPPING' ? 'animate-spin-y' : ''}`}>
@@ -365,6 +398,11 @@ export const Game: React.FC<GameProps> = ({ state, playerId, dispatch, onExit })
              </div>
         </div>
         <div className={`mt-12 text-4xl md:text-6xl font-bold animate-bounce-in ${visibleResult === 'HEADS' ? 'text-green-400 drop-shadow-[0_0_10px_rgba(74,222,128,0.8)]' : visibleResult === 'TAILS' ? 'text-red-500 drop-shadow-[0_0_10px_rgba(248,113,113,0.8)]' : 'opacity-0'}`}>{visibleResult !== 'FLIPPING' && visibleResult}</div>
+        {visibleResult !== 'FLIPPING' && (
+          <div className="mt-6 text-xs md:text-sm text-stone-400 font-mono animate-pulse">
+            Tap anywhere to continue
+          </div>
+        )}
       </div>
     );
   };
@@ -604,7 +642,7 @@ export const Game: React.FC<GameProps> = ({ state, playerId, dispatch, onExit })
       <CopycatOverlay />
       <StatusInfoOverlay />
       <DeckViewOverlay />
-      {state.activeCoinFlip && <CoinFlipOverlay event={state.activeCoinFlip} />}
+      {state.activeCoinFlip && <CoinFlipOverlay key={state.activeCoinFlip.id} event={state.activeCoinFlip} />}
       {amIReacting && state.pendingReaction && <ReactionOverlay reaction={state.pendingReaction} />}
       {amIChoosing && state.pendingChoice && <ChoiceOverlay choice={state.pendingChoice} />}
       
