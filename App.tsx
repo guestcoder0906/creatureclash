@@ -229,7 +229,7 @@ const App: React.FC = () => {
            <div className="space-y-4 text-stone-300 mb-8 text-sm md:text-base leading-relaxed">
               <p className="bg-black/30 p-3 rounded border border-white/5">
                  <span className="text-amber-400 font-bold block mb-1">Turn Actions</span>
-                 You can play <span className="text-white font-bold">1 Card</span> into your formation per turn (use <span className="text-amber-400 font-bold">Evolve</span> to play an extra card that turn!), plus up to <span className="text-white font-bold">1 Attack</span> and <span className="text-white font-bold">1 Ability</span> each turn if stamina permits.
+                 You can play <span className="text-white font-bold">1 Card</span> into your formation for free each turn, or pay <span className="text-yellow-400 font-bold">2 Stamina</span> for each extra card played that turn! Plus perform up to <span className="text-white font-bold">1 Attack</span> and <span className="text-white font-bold">1 Ability</span> if stamina permits.
               </p>
               <p className="text-xs text-stone-500 italic text-center">
                  Cards are drawn automatically from your deck. Discards are reshuffled if deck empties.

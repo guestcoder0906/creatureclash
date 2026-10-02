@@ -20,7 +20,7 @@ const ACTIVE_PHYSICALS = [
 
 const ACTIVE_ABILITIES = [
   CardId.Confuse, CardId.Hibernate, CardId.ToxicSpit, CardId.Regeneration, 
-  CardId.Focus, CardId.FocusPlus, CardId.AdrenalineRush, CardId.StickyTongue, CardId.ShedSkin, 
+  CardId.Focus, CardId.AdrenalineRush, CardId.StickyTongue, CardId.ShedSkin, 
   CardId.Rage, CardId.TerritorialDisplay, CardId.ExhaustingRoar, CardId.EnhancedSmell, 
   CardId.Copycat, CardId.Agile, CardId.Freeze, CardId.ApexEvolution,
   CardId.ShortBurst, CardId.Dig, CardId.Roar, CardId.Flight, CardId.Mimicry,
@@ -302,13 +302,16 @@ export const Game: React.FC<GameProps> = ({ state, playerId, dispatch, onExit })
   const effectiveAbilityStaminaCost = isHealingHibernate ? 0 : (selectedDef?.staminaCost ?? 0);
   const hasEnoughAbilityStamina = me.stamina >= effectiveAbilityStaminaCost;
 
-  const isFreeAction = selectedDef?.id === CardId.ShortBurst || selectedDef?.id === CardId.AdrenalineRush || selectedDef?.id === CardId.EnhancedSmell || selectedDef?.id === CardId.Focus || selectedDef?.id === CardId.FocusPlus || selectedDef?.id === CardId.Rage || (selectedDef?.id === CardId.Agile && selectedDef?.type === CardType.Ability);
+  const isFreeAction = selectedDef?.id === CardId.ShortBurst || selectedDef?.id === CardId.AdrenalineRush || selectedDef?.id === CardId.EnhancedSmell || selectedDef?.id === CardId.Focus || selectedDef?.id === CardId.Rage || (selectedDef?.id === CardId.Agile && selectedDef?.type === CardType.Ability);
   const isAttackBlocked = !!me.hasAttackedThisTurn;
   const isAbilityBlocked = !!me.hasUsedAbilityThisTurn && !isFreeAction;
   const hasEnoughAttackStamina = me.stamina >= (selectedDef?.staminaCost ?? 0);
   
   const isHandInstantAbility = isSelectedInHand && (selectedDef?.id === CardId.AdrenalineRush || selectedDef?.id === CardId.ShortBurst);
   const upgradeTargetInFormation = selectedDef?.isUpgrade ? me.formation.find(c => selectedDef.upgradeTarget?.includes(c.defId)) : null;
+
+  const freePlaysAllowed = 1 + (me.extraCardPlays || 0);
+  const isPayingStaminaForExtra = me.cardsPlayedThisTurn >= freePlaysAllowed;
 
   const canPlaySelected = () => {
     if (isInterrupted) return false;
@@ -325,15 +328,15 @@ export const Game: React.FC<GameProps> = ({ state, playerId, dispatch, onExit })
     }
     if (selectedDef.id === CardId.CrushingWeight && me.size !== 'Big') return false;
 
-    const maxCardsAllowed = 1 + (me.extraCardPlays || 0);
+    // Extra card plays cost 2 stamina
+    if (isPayingStaminaForExtra && me.stamina < 2) return false;
 
     if (selectedDef.isUpgrade) {
-      return !!upgradeTargetInFormation && me.cardsPlayedThisTurn < maxCardsAllowed;
+      return !!upgradeTargetInFormation;
     }
 
     if (!me.hasCustomDeck && selectedDef.creatureTypes !== 'All' && !selectedDef.creatureTypes.includes(me.creatureType)) return false;
     if (me.formation.some(c => c.defId === selectedDef.id)) return false;
-    if (me.cardsPlayedThisTurn >= maxCardsAllowed) return false;
     return true;
   };
 
@@ -824,7 +827,7 @@ export const Game: React.FC<GameProps> = ({ state, playerId, dispatch, onExit })
                  onClick={playSelected}
                  className={`rounded-lg py-2 md:py-3 font-black text-[10px] md:text-sm transition-all active:scale-95 disabled:opacity-30 disabled:scale-100 ${isSelectedInHand ? (canUpgrade ? (upgradeTargetInFormation ? 'bg-amber-600 text-white hover:bg-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.5)]' : 'bg-stone-800 text-stone-500 cursor-not-allowed') : (selectedDef?.id === CardId.AdrenalineRush || selectedDef?.id === CardId.ShortBurst) ? 'bg-amber-600 text-white hover:bg-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.5)] animate-pulse' : selectedDef?.type === CardType.Special ? 'bg-fuchsia-600 text-white hover:bg-fuchsia-500 shadow-[0_0_15px_rgba(217,70,239,0.4)]' : 'bg-blue-600 text-white hover:bg-blue-500 shadow-[0_0_15px_rgba(37,99,235,0.4)]') : 'bg-stone-800 text-stone-500'}`}
                >
-                 {canUpgrade ? (upgradeTargetInFormation ? `UPGRADE ${CARDS[upgradeTargetInFormation.defId].name.toUpperCase()}` : 'SELECT TARGET') : selectedDef?.id === CardId.Evolve ? 'EVOLVE (2 ST)' : selectedDef?.id === CardId.AdrenalineRush ? 'USE (+1 ST)' : selectedDef?.id === CardId.ShortBurst ? 'USE (+1 ST)' : 'PLAY CARD'}
+                 {canUpgrade ? (upgradeTargetInFormation ? `UPGRADE ${CARDS[upgradeTargetInFormation.defId].name.toUpperCase()}${isPayingStaminaForExtra ? ' (-2 ⚡)' : ''}` : 'SELECT TARGET') : selectedDef?.id === CardId.Evolve ? 'EVOLVE (2 ⚡)' : selectedDef?.id === CardId.AdrenalineRush ? 'USE (+1 ⚡)' : selectedDef?.id === CardId.ShortBurst ? 'USE (+1 ⚡)' : isPayingStaminaForExtra ? 'EXTRA PLAY (-2 ⚡)' : 'PLAY CARD'}
                </button>
                
                <button 

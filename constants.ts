@@ -241,13 +241,7 @@ export const CARDS: Record<string, CardDef> = {
   [CardId.Focus]: {
     id: CardId.Focus, name: "Focus", type: CardType.Ability, abilityStatus: AbilityStatus.ConsumableImpact,
     creatureTypes: 'All', habitats: 'All', staminaCost: 1,
-    description: "Free Action. Escape Grappled/Stuck. Next flip guaranteed Heads."
-  },
-  [CardId.FocusPlus]: {
-    id: CardId.FocusPlus, name: "Focus+", type: CardType.Ability, abilityStatus: AbilityStatus.ConsumableImpact,
-    creatureTypes: 'All', habitats: 'All', staminaCost: 1,
-    description: "Upgrade Focus. Free Action. Escape Grappled/Stuck. +1 Damage this turn. Next flip guaranteed Heads.",
-    isUpgrade: true, upgradeTarget: [CardId.Focus]
+    description: "Free Action. Escape Grappled/Stuck. +1 Damage this turn. Next flip guaranteed Heads."
   },
   [CardId.AdrenalineRush]: {
     id: CardId.AdrenalineRush, name: "Adrenaline Rush", type: CardType.Ability, abilityStatus: AbilityStatus.ConsumableImpact,

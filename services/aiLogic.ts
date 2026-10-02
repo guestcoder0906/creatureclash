@@ -255,8 +255,7 @@ export const computeAiActions = (state: GameState, aiId: string): GameAction[] =
             }
 
             // High synergy abilities
-            if (def.id === CardId.Focus) score += 12;
-            if (def.id === CardId.FocusPlus) score += 18;
+            if (def.id === CardId.Focus) score += 18;
             if (def.id === CardId.Rage) score += 12;
             if (def.id === CardId.AdrenalineRush) score += 18;
 

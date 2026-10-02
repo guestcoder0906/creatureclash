@@ -76,7 +76,6 @@ export enum CardId {
   ToxicSpit = 'toxic_spit',
   Regeneration = 'regeneration',
   Focus = 'focus',
-  FocusPlus = 'focus_plus',
   AdrenalineRush = 'adrenaline_rush',
   StickyTongue = 'sticky_tongue',
   ShedSkin = 'shed_skin',

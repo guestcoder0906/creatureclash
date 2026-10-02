@@ -611,13 +611,8 @@ export const gameReducer = (state: GS, action: GA): GS => {
             if (def.id === CID.Focus) {
                 p.statuses = p.statuses.filter(s => s.type !== 'Grappled' && s.type !== 'Stuck');
                 p.guaranteedHeads = true;
-                log(`${p.name} Focused! Breakout + Guaranteed Heads.`);
-            }
-            if (def.id === CID.FocusPlus) {
-                p.statuses = p.statuses.filter(s => s.type !== 'Grappled' && s.type !== 'Stuck');
-                p.guaranteedHeads = true;
                 addStatus(p, { type: 'DamageBuff', duration: 1 });
-                log(`${p.name} Focused+! Breakout + Dmg + Guaranteed Heads.`);
+                log(`${p.name} Focused! Breakout + +1 Damage + Guaranteed Heads.`);
             }
             if (def.id === CID.Rage) {
                 p.statuses = p.statuses.filter(s => s.type !== 'Grappled' && s.type !== 'Stuck');
@@ -939,13 +934,10 @@ export const gameReducer = (state: GS, action: GA): GS => {
           return newState;
       }
 
-      if (def.isUpgrade) {
-         const maxAllowed = 1 + (p.extraCardPlays || 0);
-         if (p.cardsPlayedThisTurn >= maxAllowed) {
-            notify(`Already played ${p.cardsPlayedThisTurn} card${p.cardsPlayedThisTurn > 1 ? 's' : ''} this turn! Play Evolve to play an extra card.`, 'warning');
-            return state;
-         }
+      const freeAllowance = 1 + (p.extraCardPlays || 0);
+      const isExtraPlay = p.cardsPlayedThisTurn >= freeAllowance;
 
+      if (def.isUpgrade) {
          let targetIndex = -1;
          if (action.targetInstanceId) {
              targetIndex = p.formation.findIndex(c => c.instanceId === action.targetInstanceId);
@@ -965,6 +957,15 @@ export const gameReducer = (state: GS, action: GA): GS => {
              return state;
          }
 
+         if (isExtraPlay) {
+            if (p.stamina < 2) {
+               notify("Need 2 Stamina to play an extra card this turn.", 'error');
+               return state;
+            }
+            p.stamina -= 2;
+            log(`${p.name} paid 2 Stamina to play an extra card (${def.name}).`);
+         }
+
          p.hand.splice(cardIdx, 1);
          p.formation[targetIndex] = {
             ...target,
@@ -973,7 +974,7 @@ export const gameReducer = (state: GS, action: GA): GS => {
          };
          
          log(`${p.name} upgraded ${CARDS[target.defId].name} to ${def.name}.`);
-         notify(`Upgraded to ${def.name}`, 'success');
+         notify(`Upgraded to ${def.name}${isExtraPlay ? ' (-2 Stamina)' : ''}`, 'success');
          p.cardsPlayedThisTurn++;
          return newState;
       }
@@ -1004,10 +1005,13 @@ export const gameReducer = (state: GS, action: GA): GS => {
           return newState;
       }
 
-      const maxCardsAllowed = 1 + (p.extraCardPlays || 0);
-      if (p.cardsPlayedThisTurn >= maxCardsAllowed) {
-        notify(`Already played ${p.cardsPlayedThisTurn} card${p.cardsPlayedThisTurn > 1 ? 's' : ''} this turn! Play Evolve to play an extra card.`, 'warning');
-        return state;
+      if (isExtraPlay) {
+         if (p.stamina < 2) {
+            notify("Need 2 Stamina to play an extra card this turn.", 'error');
+            return state;
+         }
+         p.stamina -= 2;
+         log(`${p.name} paid 2 Stamina to play an extra card (${def.name}).`);
       }
 
       if (p.formation.some(c => c.defId === def.id)) {
@@ -1027,7 +1031,7 @@ export const gameReducer = (state: GS, action: GA): GS => {
       if (def.id === CID.StrongBuild) { p.hp += 2; p.maxHp += 2; }
       
       log(`${p.name} played ${def.name}.`);
-      notify(`Played ${def.name}`, 'success');
+      notify(`Played ${def.name}${isExtraPlay ? ' (-2 Stamina)' : ''}`, 'success');
       
       checkWin(); 
       return newState;
@@ -1170,7 +1174,7 @@ export const gameReducer = (state: GS, action: GA): GS => {
         const isAbility = def.type === CType.Ability || action.actionType === 'ABILITY' || (def.type === CType.Special && def.id === CID.ApexEvolution);
         const isAttack = !isAbility && (action.actionType === 'ATTACK' || def.type === CType.Physical);
 
-        const isFreeAction = def.id === CID.ShortBurst || def.id === CID.AdrenalineRush || def.id === CID.EnhancedSmell || def.id === CID.Focus || def.id === CID.FocusPlus || def.id === CID.Rage || (def.id === CID.Agile && def.type === CType.Ability);
+        const isFreeAction = def.id === CID.ShortBurst || def.id === CID.AdrenalineRush || def.id === CID.EnhancedSmell || def.id === CID.Focus || def.id === CID.Rage || (def.id === CID.Agile && def.type === CType.Ability);
 
         // Max 1 Attack per turn rule
         if (isAttack && p.hasAttackedThisTurn) {
@@ -1221,7 +1225,7 @@ export const gameReducer = (state: GS, action: GA): GS => {
             return state;
         }
         if (p.statuses.some(s => s.type === 'Grappled')) {
-             if (def.id !== CID.Focus && def.id !== CID.FocusPlus && def.id !== CID.Rage && def.type !== CType.Physical) {
+             if (def.id !== CID.Focus && def.id !== CID.Rage && def.type !== CType.Physical) {
                  notify("Grappled! Can only Attack or use Breakout abilities.", 'error');
                  return state;
              }
