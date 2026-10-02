@@ -42,6 +42,7 @@ export class MultiplayerManager {
   private announceInterval: ReturnType<typeof setInterval> | null = null;
   private startGameTimeout: ReturnType<typeof setTimeout> | null = null;
   private gameStarted: boolean = false;
+  private isLeaving: boolean = false;
 
   public init(
     roomCode: string,
@@ -59,6 +60,7 @@ export class MultiplayerManager {
     }
 
     this.leaveRoom();
+    this.isLeaving = false;
 
     this.roomCode = roomCode.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
     this.isHost = isHost;
@@ -166,7 +168,9 @@ export class MultiplayerManager {
             `Connection failed (${status}). Please check network connection.`
           );
         } else if (status === 'CLOSED') {
-          this.callbacks?.onStatusChange('disconnected', 'Disconnected from room.');
+          if (!this.isLeaving) {
+            this.callbacks?.onStatusChange('disconnected', 'Disconnected from room.');
+          }
         }
       });
 
@@ -355,24 +359,25 @@ export class MultiplayerManager {
   }
 
   public leaveRoom(): void {
+    this.isLeaving = true;
     this.stopAnnounceLoop();
     if (this.startGameTimeout) {
       clearTimeout(this.startGameTimeout);
       this.startGameTimeout = null;
     }
     if (this.channel) {
+      const channelToClose = this.channel;
+      this.channel = null;
       const supabase = getSupabaseClient();
       if (supabase) {
-        supabase.removeChannel(this.channel);
+        supabase.removeChannel(channelToClose);
       } else {
-        this.channel.unsubscribe();
+        channelToClose.unsubscribe();
       }
-      this.channel = null;
     }
     this.roomCode = '';
     this.opponentPlayer = null;
     this.gameStarted = false;
-    this.callbacks?.onStatusChange('idle');
   }
 
   public getRoomCode(): string {

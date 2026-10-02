@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { CardId, CreatureType, GameState } from '../types';
 import { CARDS, getRandomElement } from '../constants';
 import { generateRandomAiDeck } from '../services/gameEngine';
@@ -100,14 +100,20 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
     if (cfg.anonKey) setDevKey(cfg.anonKey);
   }, []);
 
-  // Cleanup multiplayer on unmount if not in game
+  // Track whether we are in game so we don't tear down the channel on unmount when starting battle
+  const inGameRef = useRef(false);
+  useEffect(() => {
+    inGameRef.current = connectionStatus === 'in_game';
+  }, [connectionStatus]);
+
+  // Cleanup multiplayer ONLY when unmounting the entire lobby component
   useEffect(() => {
     return () => {
-      if (connectionStatus !== 'in_game') {
+      if (!inGameRef.current) {
         multiplayerService.leaveRoom();
       }
     };
-  }, [connectionStatus]);
+  }, []); // Run ONLY on unmount, never during renders or status transitions!
 
   const handleSaveDevConfig = () => {
     if (!devUrl.trim() || !devKey.trim()) return;
