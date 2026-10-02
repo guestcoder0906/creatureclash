@@ -8,6 +8,9 @@ interface DeckBuilderProps {
   playerName: string;
   onStartGame: (deck: CardId[], creatureType: CreatureType, size: 'Small' | 'Medium' | 'Big') => void;
   onBack: () => void;
+  initialDeck?: CardId[];
+  initialCreatureType?: CreatureType;
+  initialSize?: 'Small' | 'Medium' | 'Big';
 }
 
 const TypeColors: Record<CardType, string> = {
@@ -29,10 +32,17 @@ export const isCardCompatibleWithCreature = (card: CardDef, creature: CreatureTy
   return card.creatureTypes.includes(creature);
 };
 
-export const DeckBuilder: React.FC<DeckBuilderProps> = ({ playerName, onStartGame, onBack }) => {
-  const [selectedCards, setSelectedCards] = useState<CardId[]>([]);
-  const [creatureType, setCreatureType] = useState<CreatureType>(CreatureType.Mammal);
-  const [size, setSize] = useState<'Small' | 'Medium' | 'Big'>('Medium');
+export const DeckBuilder: React.FC<DeckBuilderProps> = ({ 
+  playerName, 
+  onStartGame, 
+  onBack,
+  initialDeck,
+  initialCreatureType,
+  initialSize
+}) => {
+  const [selectedCards, setSelectedCards] = useState<CardId[]>(initialDeck || []);
+  const [creatureType, setCreatureType] = useState<CreatureType>(initialCreatureType || CreatureType.Mammal);
+  const [size, setSize] = useState<'Small' | 'Medium' | 'Big'>(initialSize || 'Medium');
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<'all' | CardType>('all');
   const [hideIncompatible, setHideIncompatible] = useState(false);

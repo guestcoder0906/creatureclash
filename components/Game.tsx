@@ -8,6 +8,11 @@ interface GameProps {
   playerId: string;
   dispatch: (action: GameAction) => void;
   onExit?: () => void;
+  isMultiplayer?: boolean;
+  roomCode?: string;
+  onSendEmote?: (emote: string) => void;
+  activeEmote?: { emote: string; senderName: string } | null;
+  onRematch?: () => void;
 }
 
 const ACTIVE_PHYSICALS = [
@@ -54,7 +59,17 @@ const habitatConfig: Record<Habitat, { bg: string, emoji: string }> = {
   [Habitat.Arena]: { bg: 'bg-stone-900', emoji: '🏟️' },
 };
 
-export const Game: React.FC<GameProps> = ({ state, playerId, dispatch, onExit }) => {
+export const Game: React.FC<GameProps> = ({ 
+  state, 
+  playerId, 
+  dispatch, 
+  onExit,
+  isMultiplayer,
+  roomCode,
+  onSendEmote,
+  activeEmote,
+  onRematch
+}) => {
   const me = state.players[playerId];
   const opponentId = Object.keys(state.players).find(id => id !== playerId);
   const opponent = opponentId ? state.players[opponentId] : null;
@@ -68,6 +83,8 @@ export const Game: React.FC<GameProps> = ({ state, playerId, dispatch, onExit })
   const [inspectCardId, setInspectCardId] = useState<string | null>(null);
   const [showLog, setShowLog] = useState(false);
   const [showStatusInfo, setShowStatusInfo] = useState(false);
+  const [showEmotePicker, setShowEmotePicker] = useState(false);
+  const EMOTE_LIST = ['⚔️', '🔥', '💀', '🛡️', '👏', '😱', '🦎', '👑'];
   const logRef = useRef<HTMLDivElement>(null);
 
   const [evolveMode, setEvolveMode] = useState<'none' | 'select-formation' | 'select-hand' | 'select-apex-target'>('none');
@@ -656,6 +673,12 @@ export const Game: React.FC<GameProps> = ({ state, playerId, dispatch, onExit })
       <CopycatOverlay />
       <StatusInfoOverlay />
       <DeckViewOverlay />
+      {activeEmote && (
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[195] bg-black/85 border border-amber-400 px-5 py-2.5 rounded-full shadow-[0_0_30px_rgba(245,158,11,0.5)] animate-bounce flex items-center gap-2 pointer-events-none">
+          <span className="text-3xl">{activeEmote.emote}</span>
+          <span className="text-xs font-black text-amber-300 uppercase tracking-wider">{activeEmote.senderName}</span>
+        </div>
+      )}
       {state.activeCoinFlip && <CoinFlipOverlay key={state.activeCoinFlip.id} event={state.activeCoinFlip} />}
       {amIReacting && state.pendingReaction && <ReactionOverlay reaction={state.pendingReaction} />}
       {amIChoosing && state.pendingChoice && <ChoiceOverlay choice={state.pendingChoice} />}
@@ -720,6 +743,41 @@ export const Game: React.FC<GameProps> = ({ state, playerId, dispatch, onExit })
                  {me.deck.length} Cards (View)
                </button>
              </div>
+             {isMultiplayer && (
+               <div className="bg-stone-900/90 border border-emerald-500/30 p-2.5 rounded-lg flex items-center justify-between mt-2">
+                 <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-400">
+                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                   <span>ONLINE PVP</span>
+                   {roomCode && <span className="font-mono text-stone-400 text-[10px]">({roomCode})</span>}
+                 </div>
+                 {onSendEmote && (
+                   <div className="relative">
+                     <button
+                       onClick={() => setShowEmotePicker(!showEmotePicker)}
+                       className="px-2 py-1 bg-stone-800 hover:bg-stone-700 text-stone-200 rounded border border-stone-700 font-bold text-[10px] cursor-pointer flex items-center gap-1"
+                     >
+                       <span>💬 Emote</span>
+                     </button>
+                     {showEmotePicker && (
+                       <div className="absolute right-0 bottom-8 z-50 bg-stone-900 border border-stone-700 rounded-xl p-2 shadow-2xl flex gap-1 animate-fade-in">
+                         {EMOTE_LIST.map((em) => (
+                           <button
+                             key={em}
+                             onClick={() => {
+                               onSendEmote(em);
+                               setShowEmotePicker(false);
+                             }}
+                             className="text-lg hover:scale-125 transition-transform p-1 cursor-pointer"
+                           >
+                             {em}
+                           </button>
+                         ))}
+                       </div>
+                     )}
+                   </div>
+                 )}
+               </div>
+             )}
              <div className={`font-bold text-center py-2 rounded mt-2 text-base md:text-lg tracking-wider shadow-inner ${isMyTurn ? 'bg-green-900/30 text-green-400 border border-green-800' : 'bg-red-900/30 text-red-400 border border-red-800'}`}>{isMyTurn ? 'YOUR TURN' : 'OPPONENT TURN'}</div>
            </div>
         </div>
@@ -731,12 +789,20 @@ export const Game: React.FC<GameProps> = ({ state, playerId, dispatch, onExit })
          <div className="fixed inset-0 z-[190] bg-black/80 flex items-center justify-center p-4 backdrop-blur-md animate-fade-in pointer-events-auto">
             <div className="px-8 py-6 md:px-10 md:py-8 rounded-2xl bg-yellow-500 text-black font-black shadow-2xl border-4 border-white animate-bounce text-center flex flex-col items-center gap-3 max-w-sm w-full">
               <div className="text-2xl md:text-4xl">{state.players[state.winner].name} WINS!</div>
+              {isMultiplayer && onRematch && (
+                <button
+                  onClick={onRematch}
+                  className="mt-2 w-full px-6 py-2.5 bg-emerald-700 hover:bg-emerald-600 text-white font-black text-sm md:text-base rounded-xl border-2 border-emerald-400 transition-transform active:scale-95 shadow-lg cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <span>⚔️</span> PLAY AGAIN / REMATCH
+                </button>
+              )}
               {onExit && (
                 <button 
                   onClick={onExit}
-                  className="mt-2 px-6 py-2.5 bg-black hover:bg-stone-900 text-yellow-400 font-black text-sm md:text-base rounded-xl border-2 border-yellow-400 transition-transform active:scale-95 shadow-lg cursor-pointer"
+                  className="mt-1 w-full px-6 py-2.5 bg-black hover:bg-stone-900 text-yellow-400 font-black text-sm md:text-base rounded-xl border-2 border-yellow-400 transition-transform active:scale-95 shadow-lg cursor-pointer"
                 >
-                  BACK TO MENU / BUILD DECK
+                  BACK TO MENU
                 </button>
               )}
             </div>
