@@ -13,6 +13,7 @@ interface GameProps {
   onSendEmote?: (emote: string) => void;
   activeEmote?: { emote: string; senderName: string } | null;
   onRematch?: () => void;
+  opponentDisconnected?: boolean;
 }
 
 const ACTIVE_PHYSICALS = [
@@ -75,7 +76,8 @@ export const Game: React.FC<GameProps> = ({
   roomCode,
   onSendEmote,
   activeEmote,
-  onRematch
+  onRematch,
+  opponentDisconnected
 }) => {
   const me = state.players[playerId];
   const opponentId = Object.keys(state.players).find(id => id !== playerId);
@@ -832,6 +834,29 @@ export const Game: React.FC<GameProps> = ({
               )}
             </div>
          </div>
+      )}
+
+      {/* OPPONENT DISCONNECTED MODAL OVERLAY */}
+      {opponentDisconnected && (
+        <div className="fixed inset-0 z-[200] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in pointer-events-auto">
+          <div className="bg-stone-900 border-2 border-red-500 rounded-3xl p-6 md:p-8 max-w-sm w-full text-center shadow-2xl space-y-4">
+            <span className="text-5xl block animate-bounce">🔌</span>
+            <h2 className="text-2xl font-black text-red-400 uppercase tracking-wide">
+              Opponent Disconnected
+            </h2>
+            <p className="text-xs md:text-sm text-stone-300 leading-relaxed">
+              The other player has disconnected or reloaded. The multiplayer match has ended!
+            </p>
+            {onExit && (
+              <button
+                onClick={onExit}
+                className="w-full py-3 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-black text-sm rounded-xl shadow-lg transition transform active:scale-95 border-b-4 border-red-800 cursor-pointer"
+              >
+                RETURN TO MENU
+              </button>
+            )}
+          </div>
+        </div>
       )}
 
       {/* GAME BOARD */}

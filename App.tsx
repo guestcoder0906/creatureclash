@@ -30,8 +30,14 @@ const App: React.FC = () => {
 
   // Multiplayer State
   const [isMultiplayer, setIsMultiplayer] = useState(false);
+  const isMultiplayerRef = useRef(false);
   const [roomCode, setRoomCode] = useState('');
   const [activeEmote, setActiveEmote] = useState<{ emote: string; senderName: string } | null>(null);
+  const [opponentDisconnected, setOpponentDisconnected] = useState(false);
+
+  useEffect(() => {
+    isMultiplayerRef.current = isMultiplayer;
+  }, [isMultiplayer]);
 
   // AI Mode State
   const aiTurnTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -63,12 +69,22 @@ const App: React.FC = () => {
     });
   }, []);
 
-  // Dispatch that handles local reducer + remote broadcast
+  // Dispatch that handles local reducer + authoritative remote state broadcast
   const dispatchAction = (action: GameAction) => {
-    handleAction(action);
-    if (isMultiplayer) {
-      multiplayerService.sendAction(action);
-    }
+    setGameState(prevState => {
+      if (!prevState && action.type !== 'INIT_GAME') return null;
+      if (action.type === 'INIT_GAME') return action.payload;
+      if (action.type === 'UPDATE_STATE') return action.payload;
+      if (action.type === 'JOIN_GAME') return prevState;
+
+      const newState = gameReducer(prevState!, action);
+
+      if (isMultiplayerRef.current) {
+        // Send action along with computed authoritative state to prevent any desync
+        multiplayerService.sendAction(action, newState);
+      }
+      return newState;
+    });
   };
 
   // --- AI Logic Effect (Single Player Only) ---
@@ -252,6 +268,8 @@ const App: React.FC = () => {
   // --- Multiplayer Game Start Callback ---
   const startMultiplayerGame = (initialState: GameState, myId: string, isHost: boolean) => {
     setIsMultiplayer(true);
+    isMultiplayerRef.current = true;
+    setOpponentDisconnected(false);
     setPlayerId(myId);
     setRoomCode(multiplayerService.getRoomCode());
     handleAction({ type: 'INIT_GAME', payload: initialState });
@@ -259,11 +277,35 @@ const App: React.FC = () => {
 
     // Attach in-game multiplayer callbacks
     multiplayerService.updateGameCallbacks({
-      onRemoteAction: (remoteAction) => {
-        handleAction(remoteAction);
+      onRemoteAction: (remoteAction, syncedState) => {
+        if (syncedState) {
+          handleAction({ type: 'UPDATE_STATE', payload: syncedState });
+        } else {
+          handleAction(remoteAction);
+        }
       },
       onStateSync: (syncedState) => {
         handleAction({ type: 'UPDATE_STATE', payload: syncedState });
+      },
+      onOpponentDisconnected: () => {
+        setOpponentDisconnected(true);
+        setGameState(prev => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            winner: myId,
+            phase: 'end',
+            log: ['The other player has disconnected. The game has ended.', ...prev.log],
+            notifications: [
+              {
+                id: 'disc_' + Date.now(),
+                type: 'error',
+                message: 'The other player has disconnected. The game has ended.'
+              },
+              ...prev.notifications
+            ]
+          };
+        });
       },
       onEmoteReceived: (emote, senderName) => {
         setActiveEmote({ emote, senderName });
@@ -284,7 +326,9 @@ const App: React.FC = () => {
     if (isMultiplayer) {
       multiplayerService.leaveRoom();
       setIsMultiplayer(false);
+      isMultiplayerRef.current = false;
     }
+    setOpponentDisconnected(false);
     setStatus('menu');
   };
 
@@ -331,6 +375,7 @@ const App: React.FC = () => {
         onSendEmote={(emote) => multiplayerService.sendEmote(emote)}
         activeEmote={activeEmote}
         onRematch={() => multiplayerService.requestRematch()}
+        opponentDisconnected={opponentDisconnected}
       />
     );
   }

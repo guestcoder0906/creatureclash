@@ -25,8 +25,9 @@ export interface MultiplayerCallbacks {
   onStatusChange: (status: ConnectionStatus, message?: string) => void;
   onOpponentJoined: (opponent: RemotePlayerInfo) => void;
   onOpponentLeft: () => void;
+  onOpponentDisconnected?: () => void;
   onGameStarted: (initialState: GameState) => void;
-  onRemoteAction: (action: GameAction) => void;
+  onRemoteAction: (action: GameAction, state?: GameState) => void;
   onStateSync: (state: GameState) => void;
   onEmoteReceived: (emote: string, senderName: string) => void;
   onRematchRequested: () => void;
@@ -43,6 +44,7 @@ export class MultiplayerManager {
   private startGameTimeout: ReturnType<typeof setTimeout> | null = null;
   private gameStarted: boolean = false;
   private isLeaving: boolean = false;
+  private beforeUnloadHandler: (() => void) | null = null;
 
   public init(
     roomCode: string,
@@ -73,9 +75,10 @@ export class MultiplayerManager {
 
     try {
       const channelTopic = `room_${this.roomCode}`;
+      // Use standard fire-and-forget broadcast (ack: false) for instant low-latency peer messaging
       this.channel = supabase.channel(channelTopic, {
         config: {
-          broadcast: { ack: true, self: false },
+          broadcast: { ack: false, self: false },
           presence: { key: localPlayer.id },
         },
       });
@@ -86,7 +89,6 @@ export class MultiplayerManager {
           const remotePlayer = payload.payload as RemotePlayerInfo;
           if (remotePlayer && remotePlayer.id !== this.localPlayer?.id) {
             this.handleOpponentFound(remotePlayer);
-            // Respond back so sender also has our info
             if (this.localPlayer) {
               this.broadcastEvent('PLAYER_ANNOUNCE', this.localPlayer);
             }
@@ -102,14 +104,21 @@ export class MultiplayerManager {
           }
         })
         .on('broadcast', { event: 'GAME_ACTION' }, (payload) => {
-          if (payload?.payload?.action) {
-            this.callbacks?.onRemoteAction(payload.payload.action);
+          const action = payload?.payload?.action;
+          const state = payload?.payload?.state;
+          if (action) {
+            this.callbacks?.onRemoteAction(action, state);
+          } else if (state) {
+            this.callbacks?.onStateSync(state);
           }
         })
         .on('broadcast', { event: 'SYNC_STATE' }, (payload) => {
           if (payload?.payload?.state) {
             this.callbacks?.onStateSync(payload.payload.state);
           }
+        })
+        .on('broadcast', { event: 'PLAYER_DISCONNECTED' }, () => {
+          this.handleOpponentDisconnected();
         })
         .on('broadcast', { event: 'EMOTE' }, (payload) => {
           if (payload?.payload?.emote) {
@@ -131,14 +140,17 @@ export class MultiplayerManager {
         .on('presence', { event: 'leave' }, ({ leftPresences }) => {
           const oppLeft = leftPresences.some((p: any) => p.playerId !== this.localPlayer?.id);
           if (oppLeft) {
-            this.handleOpponentLeft();
+            if (this.gameStarted) {
+              this.handleOpponentDisconnected();
+            } else {
+              this.handleOpponentLeft();
+            }
           }
         });
 
       // 3. Subscribe to Realtime Channel
       this.channel.subscribe(async (status, err) => {
         if (status === 'SUBSCRIBED') {
-          // Track local player presence with full profile
           await this.channel?.track({
             playerId: localPlayer.id,
             name: localPlayer.name,
@@ -149,17 +161,14 @@ export class MultiplayerManager {
             timestamp: Date.now(),
           });
 
-          // Immediate broadcast announcement
           this.broadcastEvent('PLAYER_ANNOUNCE', this.localPlayer);
 
-          // Update initial status
           if (this.isHost) {
             this.callbacks?.onStatusChange('waiting_for_opponent', `Room ${this.roomCode} created! Waiting for challenger...`);
           } else {
             this.callbacks?.onStatusChange('connecting', `Joined room ${this.roomCode}! Waiting for host...`);
           }
 
-          // Periodic handshake until opponent is discovered
           this.startAnnounceLoop();
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           console.error('Supabase channel subscription failed:', status, err);
@@ -173,6 +182,14 @@ export class MultiplayerManager {
           }
         }
       });
+
+      // 4. Attach window beforeunload to immediately notify peer on tab close / reload
+      this.beforeUnloadHandler = () => {
+        if (this.channel) {
+          this.broadcastEvent('PLAYER_DISCONNECTED', { playerId: this.localPlayer?.id });
+        }
+      };
+      window.addEventListener('beforeunload', this.beforeUnloadHandler);
 
       return true;
     } catch (err: any) {
@@ -250,6 +267,12 @@ export class MultiplayerManager {
     }
   }
 
+  private handleOpponentDisconnected() {
+    this.opponentPlayer = null;
+    this.callbacks?.onOpponentDisconnected?.();
+    this.callbacks?.onStatusChange('disconnected', 'The other player has disconnected.');
+  }
+
   // Host starts the match with synchronized initial state
   public startHostGame(): void {
     if (!this.isHost || !this.localPlayer || !this.opponentPlayer) return;
@@ -323,9 +346,9 @@ export class MultiplayerManager {
     this.callbacks?.onGameStarted(payload.initialState);
   }
 
-  // Send player action to remote peer
-  public sendAction(action: GameAction): void {
-    this.broadcastEvent('GAME_ACTION', { action });
+  // Send player action to remote peer along with authoritative resulting state
+  public sendAction(action: GameAction, resultingState?: GameState): void {
+    this.broadcastEvent('GAME_ACTION', { action, state: resultingState });
   }
 
   // State reconciliation
@@ -361,6 +384,10 @@ export class MultiplayerManager {
   public leaveRoom(): void {
     this.isLeaving = true;
     this.stopAnnounceLoop();
+    if (this.beforeUnloadHandler) {
+      window.removeEventListener('beforeunload', this.beforeUnloadHandler);
+      this.beforeUnloadHandler = null;
+    }
     if (this.startGameTimeout) {
       clearTimeout(this.startGameTimeout);
       this.startGameTimeout = null;
@@ -368,6 +395,13 @@ export class MultiplayerManager {
     if (this.channel) {
       const channelToClose = this.channel;
       this.channel = null;
+      // Send quick departure signal if still active
+      channelToClose.send({
+        type: 'broadcast',
+        event: 'PLAYER_DISCONNECTED',
+        payload: { playerId: this.localPlayer?.id },
+      }).catch(() => {});
+
       const supabase = getSupabaseClient();
       if (supabase) {
         supabase.removeChannel(channelToClose);
