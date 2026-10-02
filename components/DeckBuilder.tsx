@@ -258,8 +258,11 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
           {/* SELECTED CARDS TRAY */}
           <section className="bg-stone-900/80 border-b border-stone-800 p-3 md:p-4 shadow-inner">
             <div className="flex justify-between items-center mb-2">
-              <span className="text-xs font-mono font-bold uppercase tracking-wider text-stone-300 flex items-center gap-2">
+              <span className="text-xs font-mono font-bold uppercase tracking-wider text-stone-300 flex items-center gap-2 flex-wrap">
                 <span>🎴 Your Deck Tray</span>
+                <span className="px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[11px] font-sans font-bold">
+                  {CreatureIcons[creatureType]} • {size}
+                </span>
                 <span className="text-stone-400">({selectedCards.length}/{OPTIMAL_DECK_SIZE} slots filled)</span>
               </span>
               {selectedCards.length < OPTIMAL_DECK_SIZE ? (

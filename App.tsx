@@ -135,7 +135,7 @@ const App: React.FC = () => {
     handleAction
   ]); 
 
-  // --- Single Player (Quick vs AI) ---
+  // --- Single Player (Quick vs AI with Random Creature & Size) ---
   const prepareGame = () => {
     setIsMultiplayer(false);
     const myId = 'local-player';
@@ -143,16 +143,35 @@ const App: React.FC = () => {
     setPlayerId(myId);
 
     const habitats = [Habitat.Forest, Habitat.Desert, Habitat.Water, Habitat.Arena];
-    const p1 = createPlayer(myId, myName || "Player");
-    const p2 = createPlayer(aiId, "AI Opponent");
+    const selectedHabitat = getRandomElement(habitats);
+
+    const types = [CreatureType.Mammal, CreatureType.Reptile, CreatureType.Avian, CreatureType.Amphibian];
+    const sizes: ('Small' | 'Medium' | 'Big')[] = ['Small', 'Medium', 'Big'];
+
+    // Random Creature Type and Size for Player 1
+    const p1Type = getRandomElement(types);
+    const p1Size = getRandomElement(sizes);
+    const p1Deck = generateRandomAiDeck(p1Type, p1Size);
+    const p1 = createCustomPlayer(myId, myName || "Player", p1Deck, p1Type, p1Size);
+
+    // Random Creature Type and Size for AI Opponent
+    const p2Type = getRandomElement(types);
+    const p2Size = getRandomElement(sizes);
+    const p2Deck = generateRandomAiDeck(p2Type, p2Size);
+    const p2 = createCustomPlayer(aiId, "AI Opponent", p2Deck, p2Type, p2Size);
     
     const initialState: GameState = {
       gameId: 'local-ai-game',
-      habitat: getRandomElement(habitats),
+      habitat: selectedHabitat,
       turn: 1,
       currentPlayer: myId, 
       players: { [p1.id]: p1, [p2.id]: p2 },
-      log: ["Game Started vs AI!", `Habitat: ${habitats[0]}`, "Good luck!"],
+      log: [
+        "Quick Match Started vs AI!", 
+        `${p1.name} entered as: ${p1Type} (${p1Size})!`,
+        `AI Opponent entered as: ${p2Type} (${p2Size})!`,
+        `Battlefield Habitat: ${selectedHabitat}`
+      ],
       winner: null,
       phase: 'start',
       activeCoinFlip: null,
@@ -337,6 +356,16 @@ const App: React.FC = () => {
             />
           </div>
 
+          {/* Chosen Deck Creature Preview */}
+          <div className="mb-4 p-3 bg-black/40 rounded-xl border border-stone-700/60 flex items-center justify-between text-xs">
+            <span className="text-stone-400">Current Deck:</span>
+            <span className="font-bold text-amber-300 flex items-center gap-1.5">
+              <span>{creatureType === CreatureType.Mammal ? '🐻 Mammal' : creatureType === CreatureType.Reptile ? '🦎 Reptile' : creatureType === CreatureType.Avian ? '🦅 Avian' : '🐸 Amphibian'}</span>
+              <span className="text-stone-400 font-normal">({size})</span>
+              <span className="text-emerald-400 font-mono font-bold">[{customDeck.length || 12} Cards]</span>
+            </span>
+          </div>
+
           <div className="space-y-3.5">
             {/* Real Multiplayer Button */}
             <button 
@@ -346,7 +375,7 @@ const App: React.FC = () => {
               <span className="text-xl">🌐</span>
               <div className="text-left">
                 <div className="leading-tight">ONLINE MULTIPLAYER (PVP)</div>
-                <div className="text-[10px] font-normal text-emerald-100 opacity-90">Real-time match via Supabase Realtime</div>
+                <div className="text-[10px] font-normal text-emerald-100 opacity-90">Live PvP creature battle</div>
               </div>
             </button>
 
@@ -363,7 +392,7 @@ const App: React.FC = () => {
               onClick={prepareGame} 
               className="w-full py-3 bg-stone-700 hover:bg-stone-600 text-stone-200 rounded-2xl font-bold text-sm shadow-md transition transform hover:scale-[1.02] active:scale-95 border border-stone-600 flex items-center justify-center gap-2 cursor-pointer"
             >
-              <span>⚔️</span> Single Player vs AI
+              <span>⚔️</span> Quick Play (Random Creature & Deck)
             </button>
           </div>
           

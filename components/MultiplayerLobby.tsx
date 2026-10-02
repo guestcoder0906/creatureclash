@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { CardId, CreatureType, GameState } from '../types';
-import { CARDS } from '../constants';
+import { CARDS, getRandomElement } from '../constants';
 import { generateRandomAiDeck } from '../services/gameEngine';
-import { getStoredSupabaseConfig, saveSupabaseConfig, getSupabaseClient } from '../services/supabase';
 import { multiplayerService, RemotePlayerInfo, ConnectionStatus } from '../services/multiplayer';
 
 interface MultiplayerLobbyProps {
@@ -14,6 +13,13 @@ interface MultiplayerLobbyProps {
   creatureType: CreatureType;
   size: 'Small' | 'Medium' | 'Big';
 }
+
+const CREATURE_ICONS: Record<CreatureType, string> = {
+  [CreatureType.Mammal]: '🐻 Mammal',
+  [CreatureType.Reptile]: '🦎 Reptile',
+  [CreatureType.Avian]: '🦅 Avian',
+  [CreatureType.Amphibian]: '🐸 Amphibian',
+};
 
 const generateRandomRoomCode = (): string => {
   const words = ['CLASH', 'FANG', 'ROAR', 'BEAST', 'CLAW', 'VIPER', 'HAWK', 'WOLF', 'BEAR', 'SHARK', 'APEX'];
@@ -33,27 +39,48 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'create' | 'join'>('create');
   const [roomCodeInput, setRoomCodeInput] = useState('');
-  const [createdRoomCode, setCreatedRoomCode] = useState(generateRandomRoomCode());
+  const [createdRoomCode] = useState(generateRandomRoomCode());
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('idle');
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [opponent, setOpponent] = useState<RemotePlayerInfo | null>(null);
   const [copySuccess, setCopySuccess] = useState(false);
-  const [showConfigModal, setShowConfigModal] = useState(false);
 
-  // Supabase Configuration State
-  const [supabaseUrl, setSupabaseUrl] = useState('');
-  const [supabaseKey, setSupabaseKey] = useState('');
-  const [configSaved, setConfigSaved] = useState(false);
-  const [isSupabaseReady, setIsSupabaseReady] = useState(false);
+  // Deck mode: 'custom' or 'random'
+  const hasCustomDeck = customDeck && customDeck.length >= 10;
+  const [deckMode, setDeckMode] = useState<'custom' | 'random'>(hasCustomDeck ? 'custom' : 'random');
 
-  // Load Supabase Config on mount
+  // Random setup generated on demand or mount
+  const [randomSetup, setRandomSetup] = useState(() => {
+    const types = [CreatureType.Mammal, CreatureType.Reptile, CreatureType.Avian, CreatureType.Amphibian];
+    const sizes: ('Small' | 'Medium' | 'Big')[] = ['Small', 'Medium', 'Big'];
+    const rType = getRandomElement(types);
+    const rSize = getRandomElement(sizes);
+    return {
+      type: rType,
+      size: rSize,
+      deck: generateRandomAiDeck(rType, rSize),
+    };
+  });
+
+  const rollNewRandomDeck = () => {
+    const types = [CreatureType.Mammal, CreatureType.Reptile, CreatureType.Avian, CreatureType.Amphibian];
+    const sizes: ('Small' | 'Medium' | 'Big')[] = ['Small', 'Medium', 'Big'];
+    const rType = getRandomElement(types);
+    const rSize = getRandomElement(sizes);
+    setRandomSetup({
+      type: rType,
+      size: rSize,
+      deck: generateRandomAiDeck(rType, rSize),
+    });
+  };
+
+  // Resolve current active setup for this player
+  const activeCreatureType = deckMode === 'custom' && hasCustomDeck ? creatureType : randomSetup.type;
+  const activeSize = deckMode === 'custom' && hasCustomDeck ? size : randomSetup.size;
+  const activeDeck = deckMode === 'custom' && hasCustomDeck ? customDeck : randomSetup.deck;
+
+  // Check URL parameters for ?room=CODE
   useEffect(() => {
-    const config = getStoredSupabaseConfig();
-    setSupabaseUrl(config.url);
-    setSupabaseKey(config.anonKey);
-    setIsSupabaseReady(!!(config.url && config.anonKey));
-
-    // Check URL parameters for ?room=CODE
     const searchParams = new URLSearchParams(window.location.search);
     const roomParam = searchParams.get('room');
     if (roomParam) {
@@ -71,40 +98,14 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
     };
   }, [connectionStatus]);
 
-  const handleSaveConfig = () => {
-    if (!supabaseUrl.trim() || !supabaseKey.trim()) {
-      alert('Please provide both Supabase Project URL and Anon API Key.');
-      return;
-    }
-    saveSupabaseConfig(supabaseUrl, supabaseKey);
-    setIsSupabaseReady(true);
-    setConfigSaved(true);
-    setTimeout(() => {
-      setConfigSaved(false);
-      setShowConfigModal(false);
-    }, 1200);
-  };
-
-  const getEffectiveDeck = (): CardId[] => {
-    if (customDeck && customDeck.length >= 10) {
-      return customDeck;
-    }
-    return generateRandomAiDeck(creatureType, size);
-  };
-
   const handleCreateRoom = () => {
-    if (!isSupabaseReady) {
-      setShowConfigModal(true);
-      return;
-    }
-
     const myId = `host_${Date.now().toString(36)}`;
     const localPlayer: RemotePlayerInfo = {
       id: myId,
       name: playerName || 'Host',
-      creatureType,
-      size,
-      deckCards: getEffectiveDeck(),
+      creatureType: activeCreatureType,
+      size: activeSize,
+      deckCards: activeDeck,
     };
 
     multiplayerService.init(createdRoomCode, true, localPlayer, {
@@ -130,11 +131,6 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
   };
 
   const handleJoinRoom = () => {
-    if (!isSupabaseReady) {
-      setShowConfigModal(true);
-      return;
-    }
-
     if (!roomCodeInput.trim()) {
       setStatusMessage('Please enter a room code.');
       return;
@@ -144,9 +140,9 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
     const localPlayer: RemotePlayerInfo = {
       id: myId,
       name: playerName || 'Challenger',
-      creatureType,
-      size,
-      deckCards: getEffectiveDeck(),
+      creatureType: activeCreatureType,
+      size: activeSize,
+      deckCards: activeDeck,
     };
 
     multiplayerService.init(roomCodeInput.trim(), false, localPlayer, {
@@ -204,49 +200,77 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
             <span className="text-3xl">🌐</span>
             <div>
               <h1 className="text-2xl font-black text-amber-500 uppercase tracking-wider">Online Multiplayer</h1>
-              <p className="text-xs text-stone-400">Real-time PvP matches powered by Supabase Realtime</p>
+              <p className="text-xs text-stone-400">Live PvP creature battle • Vercel Ready</p>
             </div>
           </div>
-          <button 
-            onClick={() => setShowConfigModal(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-stone-800 hover:bg-stone-700 border border-stone-700 rounded-lg text-xs font-bold text-stone-300 transition cursor-pointer"
-            title="Configure Supabase Project"
+          <button
+            onClick={onBack}
+            className="text-stone-400 hover:text-white text-xs font-bold px-3 py-1.5 bg-stone-800 rounded-lg border border-stone-700 transition cursor-pointer"
           >
-            <span className={`w-2 h-2 rounded-full ${isSupabaseReady ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-amber-400 animate-pulse'}`} />
-            <span>Supabase</span>
+            ← Menu
           </button>
         </div>
 
-        {/* Supabase Missing Notice Banner */}
-        {!isSupabaseReady && (
-          <div className="mb-6 p-4 rounded-xl bg-amber-950/40 border border-amber-600/40 text-amber-200 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        {/* Deck Selection & Chosen Creature Display Bar */}
+        <div className="mb-6 p-4 bg-stone-950/80 border border-stone-800 rounded-2xl space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-stone-800/80 pb-3">
             <div>
-              <p className="font-bold text-sm text-amber-400 mb-0.5">⚠️ Supabase Setup Required for Multiplayer</p>
-              <p className="text-stone-300">Connect your free Supabase project to enable real-time WebSocket matchmaking across devices and Vercel.</p>
+              <span className="text-xs font-bold text-stone-400 uppercase tracking-wider">Your Battler: </span>
+              <span className="font-black text-amber-400 text-sm ml-1">{playerName || 'Player'}</span>
             </div>
-            <button
-              onClick={() => setShowConfigModal(true)}
-              className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-stone-950 font-black rounded-lg text-xs transition whitespace-nowrap cursor-pointer"
-            >
-              Setup Supabase
-            </button>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-stone-400">Chosen Creature:</span>
+              <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 font-bold text-xs flex items-center gap-1">
+                {CREATURE_ICONS[activeCreatureType]}
+                <span className="text-stone-300 font-normal">({activeSize})</span>
+              </span>
+            </div>
           </div>
-        )}
 
-        {/* Selected Creature Deck Info Bar */}
-        <div className="mb-6 p-3.5 bg-black/40 border border-stone-800 rounded-xl flex items-center justify-between text-xs">
-          <div>
-            <span className="text-stone-400">Battle Profile: </span>
-            <span className="font-black text-amber-400">{playerName || 'Player'}</span>
-            <span className="text-stone-400"> ({creatureType}, {size}) • </span>
-            <span className="text-emerald-400 font-bold">{customDeck?.length || 12}-Card Deck</span>
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div className="flex gap-2">
+              {hasCustomDeck && (
+                <button
+                  onClick={() => setDeckMode('custom')}
+                  className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer ${
+                    deckMode === 'custom'
+                      ? 'bg-amber-600 text-white shadow-md'
+                      : 'bg-stone-800 text-stone-400 hover:text-stone-200'
+                  }`}
+                >
+                  My Custom Deck ({CREATURE_ICONS[creatureType]})
+                </button>
+              )}
+              <button
+                onClick={() => setDeckMode('random')}
+                className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer ${
+                  deckMode === 'random'
+                    ? 'bg-amber-600 text-white shadow-md'
+                    : 'bg-stone-800 text-stone-400 hover:text-stone-200'
+                }`}
+              >
+                🎲 Random Deck ({CREATURE_ICONS[randomSetup.type]}, {randomSetup.size})
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2 ml-auto">
+              {deckMode === 'random' && (
+                <button
+                  onClick={rollNewRandomDeck}
+                  className="text-stone-400 hover:text-amber-400 font-bold underline cursor-pointer text-[11px]"
+                  title="Re-roll a new random creature type and size"
+                >
+                  🔄 Re-roll Creature
+                </button>
+              )}
+              <button
+                onClick={onOpenDeckBuilder}
+                className="text-amber-400 hover:text-amber-300 font-bold underline cursor-pointer text-[11px]"
+              >
+                Deck Builder
+              </button>
+            </div>
           </div>
-          <button
-            onClick={onOpenDeckBuilder}
-            className="text-amber-400 hover:text-amber-300 font-bold underline cursor-pointer"
-          >
-            Edit Deck
-          </button>
         </div>
 
         {/* Main Content Area */}
@@ -279,21 +303,23 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
             {/* Tab: Create Room */}
             {activeTab === 'create' && (
               <div className="space-y-4">
-                <div className="p-4 bg-stone-950/60 rounded-2xl border border-stone-800 text-center">
+                <div className="p-5 bg-stone-950/70 rounded-2xl border border-stone-800 text-center">
                   <label className="block text-xs font-bold text-stone-400 uppercase tracking-widest mb-1.5">
                     Your Room Code
                   </label>
-                  <div className="text-3xl font-black text-amber-400 tracking-widest font-mono">
+                  <div className="text-4xl font-black text-amber-400 tracking-widest font-mono">
                     {createdRoomCode}
                   </div>
-                  <p className="text-[11px] text-stone-500 mt-1">Share this code with your friend to battle</p>
+                  <p className="text-[11px] text-stone-500 mt-2">
+                    Playing as <span className="font-bold text-amber-300">{CREATURE_ICONS[activeCreatureType]} ({activeSize})</span> with a {activeDeck.length}-card deck
+                  </p>
                 </div>
 
                 <button
                   onClick={handleCreateRoom}
                   className="w-full py-4 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-black text-lg rounded-xl shadow-lg transition transform hover:scale-[1.01] active:scale-95 border-b-4 border-orange-800 flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  <span>⚔️</span> CREATE ROOM & WAIT FOR PLAYER
+                  <span>⚔️</span> CREATE ROOM & WAIT FOR CHALLENGER
                 </button>
               </div>
             )}
@@ -303,16 +329,19 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
               <div className="space-y-4">
                 <div>
                   <label className="block text-xs font-bold text-stone-400 uppercase tracking-wider mb-2">
-                    Enter 6-Character Room Code
+                    Enter Room Code
                   </label>
                   <input
                     type="text"
                     value={roomCodeInput}
                     onChange={(e) => setRoomCodeInput(e.target.value.toUpperCase())}
-                    placeholder="e.g. CLASH7"
+                    placeholder="e.g. CLASH72"
                     maxLength={10}
                     className="w-full px-4 py-3.5 bg-black/60 rounded-xl border border-stone-700 text-amber-400 text-2xl font-black tracking-widest text-center uppercase focus:border-amber-500 outline-none font-mono"
                   />
+                  <p className="text-center text-[11px] text-stone-500 mt-1.5">
+                    Entering as <span className="font-bold text-amber-300">{CREATURE_ICONS[activeCreatureType]} ({activeSize})</span>
+                  </p>
                 </div>
 
                 <button
@@ -326,56 +355,74 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
             )}
           </div>
         ) : (
-          /* Waiting / Lobby State */
+          /* Waiting / Room Lobby State */
           <div className="space-y-6">
             <div className="p-4 bg-stone-950/80 rounded-2xl border border-stone-800 text-center">
               <div className="text-xs uppercase font-bold text-stone-400 tracking-wider mb-1">
-                Room Code
+                Active Room
               </div>
-              <div className="text-3xl md:text-4xl font-black text-amber-400 tracking-widest font-mono select-all">
+              <div className="text-4xl font-black text-amber-400 tracking-widest font-mono select-all">
                 {activeTab === 'create' ? createdRoomCode : roomCodeInput}
               </div>
 
               <div className="mt-3 flex items-center justify-center gap-2">
                 <button
                   onClick={handleCopyInviteLink}
-                  className="px-3.5 py-1.5 bg-stone-800 hover:bg-stone-700 border border-stone-700 rounded-lg text-xs font-bold text-stone-200 transition cursor-pointer flex items-center gap-1.5"
+                  className="px-4 py-1.5 bg-stone-800 hover:bg-stone-700 border border-stone-700 rounded-lg text-xs font-bold text-stone-200 transition cursor-pointer flex items-center gap-1.5"
                 >
                   <span>{copySuccess ? '✓ Copied Link!' : '📋 Copy Invite Link'}</span>
                 </button>
               </div>
             </div>
 
-            {/* Players Status Cards */}
+            {/* Players Status Cards displaying each player's chosen creature type */}
             <div className="grid grid-cols-2 gap-3">
               {/* Local Player */}
-              <div className="p-3 bg-stone-950/50 border border-amber-600/30 rounded-xl text-center">
+              <div className="p-4 bg-stone-950/70 border-2 border-amber-500/40 rounded-2xl text-center shadow-lg">
                 <span className="text-2xl block mb-1">👑</span>
-                <div className="text-xs text-amber-400 font-bold uppercase">{playerName || 'You'}</div>
-                <div className="text-[11px] text-stone-400">{creatureType} ({size})</div>
-                <div className="mt-2 text-[10px] text-emerald-400 font-bold">READY (YOU)</div>
+                <div className="text-xs text-amber-400 font-black uppercase tracking-wider">
+                  {playerName || 'You'} {activeTab === 'create' ? '(HOST)' : ''}
+                </div>
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-stone-850 rounded-full border border-stone-700 text-xs font-bold text-amber-300 my-2">
+                  <span>{CREATURE_ICONS[activeCreatureType]}</span>
+                  <span className="text-stone-400 font-normal">({activeSize})</span>
+                </div>
+                <div className="text-[11px] text-stone-400 font-mono">
+                  {activeDeck.length} Cards in Deck
+                </div>
+                <div className="mt-2 text-[10px] text-emerald-400 font-black tracking-wider uppercase">
+                  READY (YOU)
+                </div>
               </div>
 
-              {/* Opponent */}
-              <div className={`p-3 rounded-xl border text-center transition-all ${
+              {/* Opponent Player */}
+              <div className={`p-4 rounded-2xl border-2 text-center shadow-lg transition-all ${
                 opponent
-                  ? 'bg-stone-950/50 border-emerald-500/40 text-stone-200'
-                  : 'bg-stone-950/20 border-dashed border-stone-800 text-stone-500'
+                  ? 'bg-stone-950/70 border-emerald-500/50 text-stone-200'
+                  : 'bg-stone-950/30 border-dashed border-stone-800 text-stone-500'
               }`}>
                 <span className="text-2xl block mb-1">{opponent ? '⚔️' : '⏳'}</span>
-                <div className="text-xs font-bold uppercase">
-                  {opponent ? opponent.name : 'Waiting...'}
+                <div className="text-xs font-black uppercase tracking-wider">
+                  {opponent ? opponent.name : 'Waiting for Challenger...'}
                 </div>
-                <div className="text-[11px] text-stone-400">
-                  {opponent ? `${opponent.creatureType} (${opponent.size})` : 'Challenger slot'}
-                </div>
-                <div className="mt-2 text-[10px] font-bold">
-                  {opponent ? (
-                    <span className="text-emerald-400 font-bold animate-pulse">CHALLENGER READY</span>
-                  ) : (
-                    <span className="text-stone-500">WAITING FOR PLAYER</span>
-                  )}
-                </div>
+                {opponent ? (
+                  <>
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-stone-850 rounded-full border border-stone-700 text-xs font-bold text-emerald-300 my-2">
+                      <span>{CREATURE_ICONS[opponent.creatureType]}</span>
+                      <span className="text-stone-400 font-normal">({opponent.size})</span>
+                    </div>
+                    <div className="text-[11px] text-stone-400 font-mono">
+                      {opponent.deckCards.length} Cards in Deck
+                    </div>
+                    <div className="mt-2 text-[10px] text-emerald-400 font-black tracking-wider uppercase animate-pulse">
+                      CHALLENGER READY
+                    </div>
+                  </>
+                ) : (
+                  <div className="py-4 text-xs text-stone-500 italic">
+                    Waiting for someone to join...
+                  </div>
+                )}
               </div>
             </div>
 
@@ -398,7 +445,7 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
                 </button>
               ) : (
                 <div className="text-center p-3 text-xs text-stone-400 italic">
-                  Waiting for host to start the game...
+                  Waiting for host to launch the match...
                 </div>
               )}
 
@@ -420,81 +467,9 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
           >
             ← Back to Main Menu
           </button>
-          <span>Vercel + Supabase Ready</span>
+          <span>Real-time WebSocket PvP</span>
         </div>
       </div>
-
-      {/* Supabase Project Configuration Modal */}
-      {showConfigModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="max-w-md w-full bg-stone-900 border border-stone-700 rounded-2xl p-6 shadow-2xl animate-fade-in">
-            <div className="flex items-center justify-between mb-4 border-b border-stone-800 pb-3">
-              <div className="flex items-center gap-2">
-                <span className="text-2xl">⚡</span>
-                <h3 className="text-lg font-black text-amber-400">Supabase Connection</h3>
-              </div>
-              <button
-                onClick={() => setShowConfigModal(false)}
-                className="text-stone-400 hover:text-white font-bold text-lg cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-
-            <p className="text-xs text-stone-300 mb-4 leading-relaxed">
-              Enter your Supabase project credentials. These can be found in your{' '}
-              <span className="text-amber-400 font-bold">Supabase Dashboard → Project Settings → API</span>.
-              <br />
-              <span className="text-stone-400 italic">
-                When deploying to Vercel, set <code className="text-amber-300 bg-black/40 px-1 py-0.5 rounded">VITE_SUPABASE_URL</code> and <code className="text-amber-300 bg-black/40 px-1 py-0.5 rounded">VITE_SUPABASE_ANON_KEY</code> in Environment Variables!
-              </span>
-            </p>
-
-            <div className="space-y-3.5 mb-5">
-              <div>
-                <label className="block text-xs font-bold text-stone-400 mb-1">
-                  Supabase Project URL
-                </label>
-                <input
-                  type="text"
-                  placeholder="https://your-project.supabase.co"
-                  value={supabaseUrl}
-                  onChange={(e) => setSupabaseUrl(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-black/60 rounded-lg border border-stone-700 text-white text-xs font-mono focus:border-amber-500 outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-stone-400 mb-1">
-                  Supabase Anon (Public) Key
-                </label>
-                <textarea
-                  rows={3}
-                  placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                  value={supabaseKey}
-                  onChange={(e) => setSupabaseKey(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-black/60 rounded-lg border border-stone-700 text-white text-xs font-mono focus:border-amber-500 outline-none resize-none"
-                />
-              </div>
-            </div>
-
-            <div className="flex gap-2">
-              <button
-                onClick={handleSaveConfig}
-                className="flex-1 py-3 bg-amber-600 hover:bg-amber-500 text-white font-black text-sm rounded-xl transition cursor-pointer shadow-md"
-              >
-                {configSaved ? '✓ Config Saved!' : 'Save & Connect'}
-              </button>
-              <button
-                onClick={() => setShowConfigModal(false)}
-                className="px-4 py-3 bg-stone-800 hover:bg-stone-700 text-stone-300 font-bold text-sm rounded-xl transition cursor-pointer"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

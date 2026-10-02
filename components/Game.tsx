@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { GameState, PlayerState, CardType, GameAction, CardId, Habitat, CoinFlipEvent, GameNotification, PendingReaction, PendingChoice } from '../types';
+import { GameState, PlayerState, CardType, GameAction, CardId, Habitat, CoinFlipEvent, GameNotification, PendingReaction, PendingChoice, CreatureType } from '../types';
 import { CARDS, STATUS_DESCRIPTIONS } from '../constants';
 import { Card } from './Card';
 
@@ -57,6 +57,13 @@ const habitatConfig: Record<Habitat, { bg: string, emoji: string }> = {
   [Habitat.Desert]: { bg: 'bg-amber-700', emoji: '🌵' },
   [Habitat.Water]: { bg: 'bg-blue-900', emoji: '🌊' },
   [Habitat.Arena]: { bg: 'bg-stone-900', emoji: '🏟️' },
+};
+
+const CREATURE_ICONS: Record<CreatureType, string> = {
+  [CreatureType.Mammal]: '🐻 Mammal',
+  [CreatureType.Reptile]: '🦎 Reptile',
+  [CreatureType.Avian]: '🦅 Avian',
+  [CreatureType.Amphibian]: '🐸 Amphibian',
 };
 
 export const Game: React.FC<GameProps> = ({ 
@@ -478,8 +485,11 @@ export const Game: React.FC<GameProps> = ({
       <div className="fixed inset-0 z-[165] bg-black/90 flex items-center justify-center p-4 md:p-6 backdrop-blur-md animate-fade-in" onClick={() => setShowDeckModal(false)}>
         <div className="bg-stone-850 border-2 border-stone-600 rounded-2xl max-w-md w-full max-h-[80vh] overflow-y-auto shadow-2xl p-5 relative" onClick={e => e.stopPropagation()}>
           <button onClick={() => setShowDeckModal(false)} className="absolute top-4 right-4 text-stone-400 hover:text-white font-bold text-xl">✕</button>
-          <h2 className="text-xl font-bold text-amber-500 mb-1 border-b border-stone-700 pb-2">
-            Draw Deck ({me.deck.length} remaining)
+          <h2 className="text-xl font-bold text-amber-500 mb-1 border-b border-stone-700 pb-2 flex flex-col gap-1">
+            <span>Draw Deck ({me.deck.length} remaining)</span>
+            <span className="text-xs text-amber-300 font-normal font-sans">
+              Deck Type: {CREATURE_ICONS[me.creatureType]} ({me.size})
+            </span>
           </h2>
           <p className="text-xs text-stone-400 mb-4">
             Cards are drawn randomly from your deck. If your deck runs out, your discard pile is automatically reshuffled!
@@ -593,29 +603,35 @@ export const Game: React.FC<GameProps> = ({
   };
 
   const PlayerStats = ({ p, isOpponent }: { p: PlayerState, isOpponent?: boolean }) => (
-    <div className={`flex items-center gap-2 text-xs md:text-sm bg-black/60 p-2 rounded border border-white/10 w-full justify-between shadow-md shrink-0 ${isOpponent ? 'flex-row-reverse' : ''}`}>
-      <div className="font-bold text-amber-500 truncate max-w-[80px] md:max-w-[150px] flex items-center gap-2">
-          {p.name} 
-          {!isOpponent && <button onClick={() => setShowStatusInfo(true)} className="w-4 h-4 rounded-full bg-stone-600 text-white text-[10px] flex items-center justify-center border border-stone-400 hover:bg-stone-500" title="Status Info">?</button>}
+    <div className={`flex items-center gap-2 text-xs md:text-sm bg-black/60 p-2 md:p-2.5 rounded-xl border border-white/10 w-full justify-between shadow-md shrink-0 ${isOpponent ? 'flex-row-reverse' : ''}`}>
+      <div className={`flex items-center gap-2 max-w-[200px] md:max-w-[320px] ${isOpponent ? 'flex-row-reverse' : ''}`}>
+        <div className="font-black text-amber-400 truncate flex items-center gap-1.5 text-xs md:text-sm">
+          <span>{p.name}</span>
+          {!isOpponent && <button onClick={() => setShowStatusInfo(true)} className="w-4 h-4 rounded-full bg-stone-700 text-white text-[9px] flex items-center justify-center border border-stone-500 hover:bg-stone-600 cursor-pointer" title="Status Info">?</button>}
+        </div>
+        <div className="px-2 py-0.5 rounded-full bg-stone-850 border border-stone-700 text-[10px] md:text-xs font-bold text-amber-200 flex items-center gap-1 shrink-0 shadow-inner">
+          <span>{CREATURE_ICONS[p.creatureType] || p.creatureType}</span>
+          <span className="text-stone-400 font-normal">({p.size})</span>
+        </div>
       </div>
-      <div className="flex gap-3 font-mono text-sm">
-        <span className="text-red-400 font-bold drop-shadow-sm">HP:{p.hp}/{p.maxHp}</span>
-        <span className="text-yellow-400 font-bold drop-shadow-sm">ST:{p.stamina}/{p.maxStamina}</span>
+      <div className="flex gap-3 font-mono text-xs md:text-sm font-black">
+        <span className="text-red-400 drop-shadow-sm">HP:{p.hp}/{p.maxHp}</span>
+        <span className="text-yellow-400 drop-shadow-sm">ST:{p.stamina}/{p.maxStamina}</span>
       </div>
-      <div className="flex gap-1 overflow-hidden max-w-[100px] md:max-w-[150px] flex-wrap justify-end">
+      <div className="flex gap-1 overflow-hidden max-w-[90px] md:max-w-[150px] flex-wrap justify-end">
         {p.statuses.map((s, i) => (
           <span key={i} className={`px-1.5 py-0.5 rounded text-[9px] font-bold border shadow-sm truncate max-w-full ${
              s.type === 'Poisoned' ? 'bg-green-900 border-green-500 text-green-100' : 
-             s.type === 'Leeched' ? 'bg-lime-900 border-lime-500 text-lime-100' :
+             s.type === 'Leeched' ? 'bg-lime-900 border-lime-500 text-lime-100' : 
              s.type === 'Grappled' ? 'bg-orange-900 border-orange-500 text-orange-100' : 
              s.type === 'Camouflaged' ? 'bg-cyan-900 border-cyan-500 text-cyan-100' : 
              s.type === 'Hidden' ? 'bg-stone-700 border-stone-500 text-stone-300' : 
              s.type === 'Accurate' ? 'bg-yellow-900 border-yellow-500 text-yellow-100' : 
-             s.type === 'DamageBuff' ? 'bg-red-700 border-red-400 text-white' :
-             s.type === 'Chasing' ? 'bg-blue-700 border-blue-400 text-white' :
-             s.type === 'Climbing' ? 'bg-emerald-800 border-emerald-400 text-emerald-100' :
-             s.type === 'Intimidating' ? 'bg-orange-800 border-orange-500 text-orange-100' :
-             s.type === 'StaminaDebt' ? 'bg-amber-950 border-amber-500 text-amber-200' :
+             s.type === 'DamageBuff' ? 'bg-red-700 border-red-400 text-white' : 
+             s.type === 'Chasing' ? 'bg-blue-700 border-blue-400 text-white' : 
+             s.type === 'Climbing' ? 'bg-emerald-800 border-emerald-400 text-emerald-100' : 
+             s.type === 'Intimidating' ? 'bg-orange-800 border-orange-500 text-orange-100' : 
+             s.type === 'StaminaDebt' ? 'bg-amber-950 border-amber-500 text-amber-200' : 
              'bg-purple-900 border-purple-500 text-purple-100'}`}>{s.type === 'DamageBuff' ? '+1 DMG' : s.type === 'StaminaDebt' ? '-1 ST Next Turn' : s.type}</span>
         ))}
       </div>
@@ -735,14 +751,23 @@ export const Game: React.FC<GameProps> = ({
              <div className="flex justify-between items-center bg-stone-900 p-2 rounded"><span>Habitat</span> <span className="text-stone-200 font-bold uppercase text-lg">{habitatStyle.emoji} {state.habitat}</span></div>
              <div className="flex justify-between items-center bg-stone-900 p-2 rounded"><span>Turn</span> <span className="text-white font-mono">{state.turn}</span></div>
              <div className="flex justify-between items-center bg-stone-900 p-2 rounded">
-               <span>Deck</span> 
-               <button 
-                 onClick={() => setShowDeckModal(true)} 
-                 className="text-amber-400 hover:text-amber-300 font-bold font-mono underline cursor-pointer text-xs"
-               >
-                 {me.deck.length} Cards (View)
-               </button>
+               <span>Your Deck</span> 
+               <div className="flex items-center gap-1.5">
+                 <span className="font-bold text-amber-400">{CREATURE_ICONS[me.creatureType]} ({me.size})</span>
+                 <button 
+                   onClick={() => setShowDeckModal(true)} 
+                   className="text-amber-400 hover:text-amber-300 font-bold font-mono underline cursor-pointer text-[10px]"
+                 >
+                   ({me.deck.length} Left)
+                 </button>
+               </div>
              </div>
+             {opponent && (
+               <div className="flex justify-between items-center bg-stone-900 p-2 rounded">
+                 <span>Opponent Deck</span> 
+                 <span className="font-bold text-stone-300">{CREATURE_ICONS[opponent.creatureType]} ({opponent.size})</span>
+               </div>
+             )}
              {isMultiplayer && (
                <div className="bg-stone-900/90 border border-emerald-500/30 p-2.5 rounded-lg flex items-center justify-between mt-2">
                  <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-400">
