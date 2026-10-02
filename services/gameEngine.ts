@@ -54,6 +54,7 @@ export const createCustomPlayer = (
     hand, deck, discard: [], formation,
     statuses: [],
     cardsPlayedThisTurn: 0, 
+    extraCardPlays: 0,
     hasActedThisTurn: false,
     hasAttackedThisTurn: false,
     hasUsedAbilityThisTurn: false,
@@ -177,6 +178,7 @@ export const createPlayer = (id: string, name: string): PS => {
     hand, deck: remainingDeck, discard: [], formation,
     statuses: [],
     cardsPlayedThisTurn: 0, 
+    extraCardPlays: 0,
     hasActedThisTurn: false,
     hasAttackedThisTurn: false,
     hasUsedAbilityThisTurn: false,
@@ -781,6 +783,8 @@ export const gameReducer = (state: GS, action: GA): GS => {
       });
 
       nextPlayer.cardsPlayedThisTurn = 0;
+      nextPlayer.extraCardPlays = 0;
+      previousPlayer.extraCardPlays = 0;
       nextPlayer.hasActedThisTurn = false;
       nextPlayer.hasAttackedThisTurn = false;
       nextPlayer.hasUsedAbilityThisTurn = false;
@@ -861,58 +865,16 @@ export const gameReducer = (state: GS, action: GA): GS => {
          return state;
        }
        
-       const formationCardIdx = p.formation.findIndex(c => c.instanceId === action.targetFormationId);
-       if (formationCardIdx === -1) {
-         notify("Invalid Evolve target.", 'error');
-         return state;
-       }
-       const formationCard = p.formation[formationCardIdx];
-
-       if (CARDS[formationCard.defId].type === CType.Size) {
-           notify("Cannot Evolve Size cards.", 'error');
-           return state;
-       }
-
-       const evolveCardIdx = p.hand.findIndex(c => c.instanceId === action.evolveInstanceId);
-       if (evolveCardIdx === -1) return state;
-       
-       p.hand.splice(evolveCardIdx, 1);
-
-       const replaceCardIdx = p.hand.findIndex(c => c.instanceId === action.replacementHandId);
-       if (replaceCardIdx === -1) {
-         notify("Invalid Evolve selection.", 'error');
-         return state;
-       }
-       const replacementCard = p.hand[replaceCardIdx];
-       const replacementDef = CARDS[replacementCard.defId];
-
-       if (!isCardCompatible(p, replacementDef)) {
-           notify(`Cannot Evolve: ${replacementDef.name} is incompatible with ${p.creatureType}.`, 'error');
-           return state;
+       const evolveCardIdx = p.hand.findIndex(c => c.instanceId === action.evolveInstanceId || CARDS[c.defId].id === CID.Evolve);
+       if (evolveCardIdx !== -1) {
+           const [evolveCard] = p.hand.splice(evolveCardIdx, 1);
+           p.discard.push(evolveCard);
        }
 
        p.stamina -= 2;
-       p.formation[formationCardIdx] = replacementCard;
-       p.hand[replaceCardIdx] = formationCard; 
-       
-       log(`${p.name} Evolved! Swapped ${CARDS[formationCard.defId].name} with ${replacementDef.name}.`);
-       notify("Evolution Complete!", 'success');
-
-       if (replacementDef.isUpgrade && replacementDef.upgradeTarget) {
-           const targetIdx = p.formation.findIndex((c, idx) => 
-               idx !== formationCardIdx && replacementDef.upgradeTarget!.includes(c.defId)
-           );
-
-           if (targetIdx !== -1) {
-               const targetCard = p.formation[targetIdx];
-               log(`${p.name}'s ${replacementDef.name} replaces ${CARDS[targetCard.defId].name}!`);
-               
-               p.formation[targetIdx] = replacementCard;
-               
-               p.formation.splice(formationCardIdx, 1);
-           }
-       }
-
+       p.extraCardPlays = (p.extraCardPlays || 0) + 1;
+       log(`${p.name} played Evolve! Can play an extra card this turn.`);
+       notify("Evolve: Can play an extra card this turn!", 'success');
        return newState;
     }
 
@@ -965,7 +927,27 @@ export const gameReducer = (state: GS, action: GA): GS => {
           return state;
       }
 
+      if (def.id === CID.Evolve) {
+          if (p.stamina < 2) {
+             notify("Need 2 Stamina to play Evolve.", 'error');
+             return state;
+          }
+          p.stamina -= 2;
+          p.hand.splice(cardIdx, 1);
+          p.discard.push(card);
+          p.extraCardPlays = (p.extraCardPlays || 0) + 1;
+          log(`${p.name} played Evolve! Can play an extra card this turn.`);
+          notify("Evolve: Can play an extra card this turn!", 'success');
+          return newState;
+      }
+
       if (def.isUpgrade) {
+         const maxAllowed = 1 + (p.extraCardPlays || 0);
+         if (p.cardsPlayedThisTurn >= maxAllowed) {
+            notify(`Already played ${p.cardsPlayedThisTurn} card${p.cardsPlayedThisTurn > 1 ? 's' : ''} this turn! Play Evolve to play an extra card.`, 'warning');
+            return state;
+         }
+
          let targetIndex = -1;
          if (action.targetInstanceId) {
              targetIndex = p.formation.findIndex(c => c.instanceId === action.targetInstanceId);
@@ -1024,20 +1006,9 @@ export const gameReducer = (state: GS, action: GA): GS => {
           return newState;
       }
 
-      const physicalCount = p.formation.filter(c => CARDS[c.defId].type === CType.Physical).length;
-      const abilityCount = p.formation.filter(c => CARDS[c.defId].type === CType.Ability).length;
-
-      if (def.type === CType.Physical && physicalCount >= 5) {
-         notify("Max 5 Physical cards active! Use Evolve or Upgrade.", 'error');
-         return state;
-      }
-      if (def.type === CType.Ability && abilityCount >= 5) {
-         notify("Max 5 Ability cards active! Use Evolve or Upgrade.", 'error');
-         return state;
-      }
-
-      if (p.cardsPlayedThisTurn >= 1) {
-        notify("Can only play 1 card per turn!", 'error');
+      const maxCardsAllowed = 1 + (p.extraCardPlays || 0);
+      if (p.cardsPlayedThisTurn >= maxCardsAllowed) {
+        notify(`Already played ${p.cardsPlayedThisTurn} card${p.cardsPlayedThisTurn > 1 ? 's' : ''} this turn! Play Evolve to play an extra card.`, 'warning');
         return state;
       }
 

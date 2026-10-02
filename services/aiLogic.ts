@@ -93,95 +93,71 @@ export const computeAiActions = (state: GameState, aiId: string): GameAction[] =
   }
 
   // --- 1. PLAY CARD PHASE ---
-  if (cardsPlayed === 0) {
-    
-    // Check for Evolve Logic
-    const evolveCardIndex = ai.hand.findIndex(c => CARDS[c.defId].id === CardId.Evolve);
-    const canEvolve = evolveCardIndex !== -1 && currentStamina >= 2 && ai.formation.length > 0 && ai.hand.length > 1;
+  // Check for Evolve Logic
+  const evolveCard = ai.hand.find(c => CARDS[c.defId].id === CardId.Evolve);
+  if (evolveCard && currentStamina >= 2) {
+      actions.push({
+          type: 'PLAY_CARD',
+          playerId: aiId,
+          cardInstanceId: evolveCard.instanceId
+      });
+      currentStamina -= 2;
+  }
 
-    if (canEvolve) {
-        // Evolve logic: Swap a weak formation card for a strong hand card
-        const formationCandidates = ai.formation.filter(c => CARDS[c.defId].type !== CardType.Size);
-        const formationTarget = [...formationCandidates].sort((a, b) => CARDS[a.defId].staminaCost - CARDS[b.defId].staminaCost)[0];
-        const validHandCards = ai.hand.filter((c, idx) => idx !== evolveCardIndex && c.defId !== CardId.Evolve);
-        const handTarget = [...validHandCards].sort((a, b) => CARDS[b.defId].staminaCost - CARDS[a.defId].staminaCost)[0];
+  const maxAllowedPlays = 1 + (ai.extraCardPlays || 0) + (evolveCard && currentStamina >= 0 ? 1 : 0);
+  if (cardsPlayed < maxAllowedPlays) {
+      // Try to find an upgrade first
+      const upgrades = ai.hand.filter(c => CARDS[c.defId].isUpgrade);
+      let playedUpgrade = false;
+      
+      for (const upg of upgrades) {
+      const def = CARDS[upg.defId];
+      if (currentStamina >= def.staminaCost && def.upgradeTarget) {
+          const target = ai.formation.find(c => def.upgradeTarget!.includes(c.defId));
+          if (target) {
+          actions.push({
+              type: 'PLAY_CARD',
+              playerId: aiId,
+              cardInstanceId: upg.instanceId,
+              targetInstanceId: target.instanceId
+          });
+          currentStamina -= def.staminaCost;
+          cardsPlayed++; 
+          playedUpgrade = true;
+          break;
+          }
+      }
+      }
 
-        if (formationTarget && handTarget) {
-            actions.push({
-                type: 'PLAY_EVOLVE_CARD',
-                playerId: aiId,
-                evolveInstanceId: ai.hand[evolveCardIndex].instanceId,
-                targetFormationId: formationTarget.instanceId,
-                replacementHandId: handTarget.instanceId
-            });
-            currentStamina -= 2;
-        }
-    } else {
+      // If no upgrade, play a normal card
+      if (!playedUpgrade) {
+      const validCards = ai.hand.filter(c => {
+          const def = CARDS[c.defId];
+          const typeMatch = ai.hasCustomDeck || def.creatureTypes === 'All' || def.creatureTypes.includes(ai.creatureType);
+          // Explicitly filter out Evolve/Apex and instant free-use cards
+          return typeMatch && !def.isUpgrade && def.id !== CardId.Evolve && def.id !== CardId.ApexEvolution && def.id !== CardId.AdrenalineRush && def.id !== CardId.ShortBurst;
+      });
 
-        // Try to find an upgrade first
-        const upgrades = ai.hand.filter(c => CARDS[c.defId].isUpgrade);
-        let playedUpgrade = false;
-        
-        for (const upg of upgrades) {
-        const def = CARDS[upg.defId];
-        if (currentStamina >= def.staminaCost && def.upgradeTarget) {
-            const target = ai.formation.find(c => def.upgradeTarget!.includes(c.defId));
-            if (target) {
-            actions.push({
-                type: 'PLAY_CARD',
-                playerId: aiId,
-                cardInstanceId: upg.instanceId,
-                targetInstanceId: target.instanceId
-            });
-            currentStamina -= def.staminaCost;
-            cardsPlayed++; 
-            playedUpgrade = true;
-            break;
-            }
-        }
-        }
+      if (validCards.length > 0) {
+          const physCount = ai.formation.filter(c => CARDS[c.defId].type === CardType.Physical).length;
 
-        // If no upgrade, play a normal card
-        if (!playedUpgrade) {
-        const validCards = ai.hand.filter(c => {
-            const def = CARDS[c.defId];
-            const typeMatch = ai.hasCustomDeck || def.creatureTypes === 'All' || def.creatureTypes.includes(ai.creatureType);
-            // Explicitly filter out Evolve/Apex and instant free-use cards
-            return typeMatch && !def.isUpgrade && def.id !== CardId.Evolve && def.id !== CardId.ApexEvolution && def.id !== CardId.AdrenalineRush && def.id !== CardId.ShortBurst;
-        });
-
-        if (validCards.length > 0) {
-            // Check limits before playing
-            const physCount = ai.formation.filter(c => CARDS[c.defId].type === CardType.Physical).length;
-            const abilCount = ai.formation.filter(c => CARDS[c.defId].type === CardType.Ability).length;
-
-            const playables = validCards.filter(c => {
-                const def = CARDS[c.defId];
-                if (def.type === CardType.Physical && physCount >= 5) return false;
-                if (def.type === CardType.Ability && abilCount >= 5) return false;
-                return true;
-            });
-
-            if (playables.length > 0) {
-                // Heuristic: Play Physical if few physicals, else Ability
-                let chosen = playables.find(c => CARDS[c.defId].type === CardType.Physical);
-                if (!chosen || physCount >= 2) {
-                    // Else take any ability
-                    chosen = playables.find(c => CARDS[c.defId].type === CardType.Ability) || playables[0];
-                }
-                
-                if (chosen) {
-                    actions.push({
-                        type: 'PLAY_CARD',
-                        playerId: aiId,
-                        cardInstanceId: chosen.instanceId
-                    });
-                    cardPlayedInstance = chosen;
-                }
-            }
-        }
-        }
-    }
+          // Heuristic: Play Physical if few physicals, else Ability
+          let chosen = validCards.find(c => CARDS[c.defId].type === CardType.Physical);
+          if (!chosen || physCount >= 2) {
+              chosen = validCards.find(c => CARDS[c.defId].type === CardType.Ability) || validCards[0];
+          }
+          
+          if (chosen) {
+              actions.push({
+                  type: 'PLAY_CARD',
+                  playerId: aiId,
+                  cardInstanceId: chosen.instanceId
+              });
+              cardPlayedInstance = chosen;
+              cardsPlayed++;
+          }
+      }
+      }
   }
 
   // --- APEX EVOLUTION LOGIC ---

@@ -136,6 +136,7 @@ export interface PlayerState {
   formation: CardInstance[];
   statuses: StatusEffect[];
   cardsPlayedThisTurn: number;
+  extraCardPlays?: number;
   hasActedThisTurn: boolean;
   hasAttackedThisTurn?: boolean;
   hasUsedAbilityThisTurn?: boolean;

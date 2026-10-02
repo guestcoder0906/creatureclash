@@ -228,12 +228,8 @@ const App: React.FC = () => {
            <h2 className="text-3xl font-bold text-amber-500 mb-6 text-center">How to Play</h2>
            <div className="space-y-4 text-stone-300 mb-8 text-sm md:text-base leading-relaxed">
               <p className="bg-black/30 p-3 rounded border border-white/5">
-                 <span className="text-amber-400 font-bold block mb-1">Deck Building Limit</span>
-                 Max <span className="text-white font-bold">5 Physical</span> and Max <span className="text-white font-bold">5 Ability</span> cards active on the field at once.
-              </p>
-              <p className="bg-black/30 p-3 rounded border border-white/5">
                  <span className="text-amber-400 font-bold block mb-1">Turn Actions</span>
-                 You can generally perform <span className="text-white font-bold">1 Play Card</span> and <span className="text-white font-bold">1 Action</span> (Attack/Ability) per turn, unless effects apply. Each ability has a max of <span className="text-white font-bold">1 use per turn</span>.
+                 You can play <span className="text-white font-bold">1 Card</span> into your formation per turn (use <span className="text-amber-400 font-bold">Evolve</span> to play an extra card that turn!), plus up to <span className="text-white font-bold">1 Attack</span> and <span className="text-white font-bold">1 Ability</span> each turn if stamina permits.
               </p>
               <p className="text-xs text-stone-500 italic text-center">
                  Cards are drawn automatically from your deck. Discards are reshuffled if deck empties.

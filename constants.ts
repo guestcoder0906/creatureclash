@@ -21,7 +21,7 @@ export const CARDS: Record<string, CardDef> = {
   [CardId.Evolve]: {
     id: CardId.Evolve, name: "Evolve", type: CardType.Special, abilityStatus: AbilityStatus.ConsumableImpact,
     creatureTypes: 'All', habitats: 'All', staminaCost: 2,
-    description: "Swap a played card with a card in your hand. Discard Evolve after use."
+    description: "Costs 2 Stamina. Play an extra card this turn instead of just 1. Discard Evolve after use."
   },
   [CardId.ApexEvolution]: {
     id: CardId.ApexEvolution, name: "Apex Evolution", type: CardType.Special, abilityStatus: AbilityStatus.ConsumableImpact,

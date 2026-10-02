@@ -237,8 +237,7 @@ export const Game: React.FC<GameProps> = ({ state, playerId, dispatch, onExit })
     if (!card) return;
 
     if (CARDS[card.defId].id === CardId.Evolve) {
-       setEvolveMode('select-formation');
-       setEvolveCardId(selectedCardId);
+       dispatch({ type: 'PLAY_CARD', playerId, cardInstanceId: selectedCardId });
        setSelectedCardId(null);
        return;
     }
@@ -314,17 +313,27 @@ export const Game: React.FC<GameProps> = ({ state, playerId, dispatch, onExit })
   const canPlaySelected = () => {
     if (isInterrupted) return false;
     if (!selectedDef || !isSelectedInHand) return false;
-    if (selectedDef.isUpgrade) {
-      return !!upgradeTargetInFormation && me.cardsPlayedThisTurn < 1;
+
+    // Evolve costs 2 stamina and grants an extra card play
+    if (selectedDef.id === CardId.Evolve) {
+      return me.stamina >= 2;
     }
-    if (selectedDef.id === CardId.CrushingWeight && me.size !== 'Big') return false;
-    if (selectedDef.id === CardId.Evolve && (me.stamina < 2 || me.formation.length === 0 || me.hand.length < 2)) return false;
+
     if (selectedDef.id === CardId.ApexEvolution) return false;
     if (selectedDef.id === CardId.AdrenalineRush || selectedDef.id === CardId.ShortBurst) {
       return !isSelectedAbilityUsed;
     }
+    if (selectedDef.id === CardId.CrushingWeight && me.size !== 'Big') return false;
+
+    const maxCardsAllowed = 1 + (me.extraCardPlays || 0);
+
+    if (selectedDef.isUpgrade) {
+      return !!upgradeTargetInFormation && me.cardsPlayedThisTurn < maxCardsAllowed;
+    }
+
     if (!me.hasCustomDeck && selectedDef.creatureTypes !== 'All' && !selectedDef.creatureTypes.includes(me.creatureType)) return false;
-    if (me.cardsPlayedThisTurn >= 1) return false;
+    if (me.formation.some(c => c.defId === selectedDef.id)) return false;
+    if (me.cardsPlayedThisTurn >= maxCardsAllowed) return false;
     return true;
   };
 
@@ -712,31 +721,28 @@ export const Game: React.FC<GameProps> = ({ state, playerId, dispatch, onExit })
         <div className="flex-1 overflow-y-auto scrollbar-hide text-xs font-mono space-y-2 text-stone-400 px-1" ref={logRef}>{state.log.map((l, i) => <div key={i} className="border-b border-white/5 pb-1 leading-relaxed">{l}</div>)}</div>
       </div>
 
-      {/* CENTER STATUS - FIXED POSITION */}
-      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[50] pointer-events-none w-full flex justify-center">
-          {!state.winner && (
-            <div className={`px-6 py-2 md:px-8 md:py-3 rounded-xl border-2 shadow-[0_0_30px_rgba(0,0,0,0.5)] text-sm md:text-lg font-black backdrop-blur-md transition-all duration-500 ${isMyTurn ? 'bg-green-900/80 border-green-500 text-green-100 scale-105' : 'bg-red-900/80 border-red-500 text-red-100'}`}>{isMyTurn ? 'YOUR TURN' : 'WAITING...'}</div>
-          )}
-          {state.winner && (
-             <div className="px-8 py-6 md:px-10 md:py-8 rounded-2xl bg-yellow-500 text-black font-black shadow-2xl border-4 border-white animate-bounce z-50 text-center pointer-events-auto flex flex-col items-center gap-3">
-               <div className="text-2xl md:text-4xl">{state.players[state.winner].name} WINS!</div>
-               {onExit && (
-                 <button 
-                   onClick={onExit}
-                   className="mt-2 px-6 py-2.5 bg-black hover:bg-stone-900 text-yellow-400 font-black text-sm md:text-base rounded-xl border-2 border-yellow-400 transition-transform active:scale-95 shadow-lg cursor-pointer"
-                 >
-                   BACK TO MENU / BUILD DECK
-                 </button>
-               )}
-             </div>
-          )}
-      </div>
+      {/* WINNER OVERLAY */}
+      {state.winner && (
+         <div className="fixed inset-0 z-[190] bg-black/80 flex items-center justify-center p-4 backdrop-blur-md animate-fade-in pointer-events-auto">
+            <div className="px-8 py-6 md:px-10 md:py-8 rounded-2xl bg-yellow-500 text-black font-black shadow-2xl border-4 border-white animate-bounce text-center flex flex-col items-center gap-3 max-w-sm w-full">
+              <div className="text-2xl md:text-4xl">{state.players[state.winner].name} WINS!</div>
+              {onExit && (
+                <button 
+                  onClick={onExit}
+                  className="mt-2 px-6 py-2.5 bg-black hover:bg-stone-900 text-yellow-400 font-black text-sm md:text-base rounded-xl border-2 border-yellow-400 transition-transform active:scale-95 shadow-lg cursor-pointer"
+                >
+                  BACK TO MENU / BUILD DECK
+                </button>
+              )}
+            </div>
+         </div>
+      )}
 
       {/* GAME BOARD */}
       <div className={`flex-1 flex flex-col relative bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] ${habitatStyle.bg} transition-colors duration-1000`}>
         
         {/* BOARD CONTENT */}
-        <div className="flex-1 flex flex-col min-h-0">
+        <div className="flex-1 flex flex-col min-h-0 justify-between">
             {/* OPPONENT AREA */}
             <div className="flex-1 flex flex-col p-2 md:p-3 bg-black/30 border-b border-white/5 min-h-min shrink-0 justify-center transition-colors duration-500 shadow-lg gap-2">
                <PlayerStats p={opponent} isOpponent />
@@ -746,6 +752,26 @@ export const Game: React.FC<GameProps> = ({ state, playerId, dispatch, onExit })
                  ))}
                </div>
                <FormationArea p={opponent} isSelf={false} />
+            </div>
+
+            {/* EXACT CENTER CLASH DIVIDER & TURN UI TEXT BETWEEN BOTH PLAYERS' CARDS */}
+            <div className="relative py-1.5 md:py-2 flex items-center justify-center shrink-0 select-none z-20 w-full px-3">
+               <div className="absolute inset-0 flex items-center px-4" aria-hidden="true">
+                  <div className="w-full border-t border-white/10" />
+               </div>
+               
+               {!state.winner && (
+                  <div className="relative z-10 flex items-center">
+                     <div className={`px-4 py-1.5 md:px-6 md:py-2 rounded-full border-2 shadow-[0_4px_25px_rgba(0,0,0,0.6)] text-xs md:text-sm font-black tracking-wider uppercase backdrop-blur-md transition-all duration-300 flex items-center gap-2 ${
+                        isMyTurn 
+                          ? 'bg-emerald-950/95 border-emerald-400 text-emerald-100 ring-2 ring-emerald-500/30 shadow-[0_0_20px_rgba(16,185,129,0.35)] scale-105' 
+                          : 'bg-stone-900/95 border-stone-700 text-stone-300'
+                     }`}>
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${isMyTurn ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+                        <span>{isMyTurn ? 'YOUR TURN' : 'OPPONENT TURN'}</span>
+                     </div>
+                  </div>
+               )}
             </div>
 
             {/* PLAYER AREA */}
