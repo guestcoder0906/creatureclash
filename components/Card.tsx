@@ -36,17 +36,21 @@ export const Card: React.FC<CardProps> = ({ defId, charges, onClick, isPlayable,
   
   let sizeClasses = '';
   if (isSmall) {
-    sizeClasses = 'w-20 h-28 md:w-24 md:h-32 text-[10px]';
+    sizeClasses = 'w-16 h-24 sm:w-20 sm:h-28 md:w-24 md:h-32 text-[9px] sm:text-[10px]';
   } else {
     // Standard size (Hand) or Overlay size
-    // Responsive width/height for hand cards
-    sizeClasses = 'w-32 h-48 md:w-40 md:h-56 text-[10px] md:text-xs z-10 shrink-0';
+    // Responsive width/height for hand cards on mobile and desktop
+    sizeClasses = 'w-28 h-40 sm:w-32 sm:h-46 md:w-38 md:h-54 text-[10px] sm:text-[11px] md:text-xs z-10 shrink-0';
     if (!noHover) {
-       sizeClasses += ' hover:scale-105 hover:shadow-xl hover:z-20';
+       sizeClasses += ' hover:scale-105 hover:shadow-xl hover:z-20 active:scale-95';
     }
   }
 
-  const stateClasses = isSelected ? 'ring-4 ring-yellow-400 translate-y-[-10px] shadow-[0_0_20px_rgba(250,204,21,0.6)]' : isPlayable ? 'hover:border-white cursor-pointer' : 'opacity-100';
+  const stateClasses = isSelected 
+    ? 'ring-4 ring-yellow-400 -translate-y-2 shadow-[0_0_20px_rgba(250,204,21,0.6)]' 
+    : isPlayable 
+    ? 'hover:border-white cursor-pointer active:scale-95 touch-manipulation' 
+    : 'opacity-100';
   const animationClass = isSmall ? 'animate-fade-in-up' : '';
 
   const upgradeTargetNames = def.isUpgrade && def.upgradeTarget && def.upgradeTarget.length > 0

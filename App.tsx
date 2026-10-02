@@ -391,9 +391,9 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-stone-900 text-white p-4">
+    <div className="min-h-[100dvh] overflow-y-auto overscroll-contain flex flex-col items-center justify-start sm:justify-center bg-stone-900 text-white p-3 sm:p-4 py-6 sm:py-10">
       {status === 'menu' && (
-        <div className="max-w-md w-full p-8 bg-stone-800 rounded-3xl shadow-2xl border border-stone-700 animate-fade-in">
+        <div className="max-w-md w-full p-5 sm:p-8 bg-stone-800 rounded-3xl shadow-2xl border border-stone-700 animate-fade-in my-auto">
           <div className="text-center mb-6">
             <span className="text-4xl block mb-1">🐾</span>
             <h1 className="text-4xl font-black text-amber-500 uppercase tracking-tight">Creature Clash</h1>

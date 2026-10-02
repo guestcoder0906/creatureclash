@@ -157,51 +157,51 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
   const specialCount = filteredCards.filter(c => c.type === CardType.Special).length;
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-stone-950 text-white font-sans overflow-hidden">
+    <div className="fixed inset-0 z-50 flex flex-col h-[100dvh] max-h-[100dvh] bg-stone-950 text-white font-sans overflow-hidden">
       {/* HEADER (FIXED AT TOP) */}
-      <header className="bg-stone-900 border-b border-stone-800 p-3 md:p-4 shrink-0 shadow-xl z-20">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-3">
-          <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-start">
+      <header className="bg-stone-900 border-b border-stone-800 p-2.5 sm:p-3 md:p-4 shrink-0 shadow-xl z-20">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 w-full md:w-auto justify-between md:justify-start">
             <button 
               onClick={onBack}
-              className="px-3 py-1.5 bg-stone-800 hover:bg-stone-700 border border-stone-600 rounded text-xs md:text-sm font-bold transition active:scale-95 cursor-pointer"
+              className="px-2.5 py-1 sm:px-3 sm:py-1.5 bg-stone-800 hover:bg-stone-700 border border-stone-600 rounded-lg text-xs md:text-sm font-bold transition active:scale-95 cursor-pointer shrink-0"
             >
               ← Back
             </button>
-            <div>
-              <h1 className="text-lg md:text-2xl font-black text-amber-500 uppercase tracking-tight flex items-center gap-2">
-                🃏 Custom Deck Builder
+            <div className="truncate">
+              <h1 className="text-base sm:text-lg md:text-2xl font-black text-amber-500 uppercase tracking-tight flex items-center gap-1.5 sm:gap-2">
+                <span>🃏</span> <span>Deck Builder</span>
               </h1>
-              <p className="text-[11px] text-stone-400">
-                Optimal Deck: Pick exactly <span className="text-amber-400 font-bold">{OPTIMAL_DECK_SIZE} cards</span> matching your creature type or 'All'. Incompatible cards are greyed out.
+              <p className="text-[10px] sm:text-[11px] text-stone-400 truncate">
+                Pick <span className="text-amber-400 font-bold">{OPTIMAL_DECK_SIZE} cards</span> matching creature type or 'All'
               </p>
             </div>
           </div>
 
           {/* DECK COUNTER & QUICK ACTIONS */}
-          <div className="flex items-center gap-2 md:gap-3 w-full md:w-auto justify-end">
-            <div className={`px-3 py-1.5 md:px-4 md:py-2 rounded-xl border-2 font-mono font-black text-xs md:text-sm flex items-center gap-2 shadow-lg transition-all ${
+          <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3 w-full md:w-auto justify-end flex-wrap sm:flex-nowrap">
+            <div className={`px-2.5 py-1 sm:px-3 sm:py-1.5 md:px-4 md:py-2 rounded-xl border-2 font-mono font-black text-xs md:text-sm flex items-center gap-1.5 shadow-lg transition-all ${
               selectedCards.length === OPTIMAL_DECK_SIZE 
                 ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300 shadow-[0_0_20px_rgba(16,185,129,0.3)]' 
                 : 'bg-stone-800 border-amber-500/60 text-amber-400'
             }`}>
               <span>Deck:</span>
-              <span className="text-sm md:text-lg">{selectedCards.length} / {OPTIMAL_DECK_SIZE}</span>
-              {selectedCards.length === OPTIMAL_DECK_SIZE && <span className="text-emerald-400 animate-bounce">✓ READY</span>}
+              <span className="text-xs sm:text-sm md:text-lg">{selectedCards.length}/{OPTIMAL_DECK_SIZE}</span>
+              {selectedCards.length === OPTIMAL_DECK_SIZE && <span className="text-emerald-400 animate-bounce">✓</span>}
             </div>
 
             <button
               onClick={autoPickDeck}
-              className="px-3 py-1.5 md:py-2 bg-purple-900/70 hover:bg-purple-800 text-purple-200 border border-purple-500 rounded-lg text-xs md:text-sm font-bold transition active:scale-95 shadow cursor-pointer whitespace-nowrap"
+              className="px-2.5 py-1 sm:px-3 sm:py-1.5 md:py-2 bg-purple-900/70 hover:bg-purple-800 text-purple-200 border border-purple-500 rounded-lg text-xs md:text-sm font-bold transition active:scale-95 shadow cursor-pointer whitespace-nowrap"
               title="Automatically pick 12 compatible cards"
             >
-              🎲 Auto-Pick {OPTIMAL_DECK_SIZE}
+              🎲 Auto-Pick
             </button>
 
             {selectedCards.length > 0 && (
               <button
                 onClick={clearDeck}
-                className="px-2.5 py-1.5 md:py-2 bg-stone-800 hover:bg-red-900/50 text-stone-400 hover:text-red-300 border border-stone-700 hover:border-red-500 rounded-lg text-xs font-bold transition cursor-pointer"
+                className="px-2 py-1 sm:px-2.5 sm:py-1.5 md:py-2 bg-stone-800 hover:bg-red-900/50 text-stone-400 hover:text-red-300 border border-stone-700 hover:border-red-500 rounded-lg text-xs font-bold transition cursor-pointer"
               >
                 Clear
               </button>
@@ -210,15 +210,15 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
         </div>
 
         {/* CREATURE SETUP: TYPE & SIZE */}
-        <div className="max-w-7xl mx-auto mt-2.5 pt-2.5 border-t border-stone-800 grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-4">
+        <div className="max-w-7xl mx-auto mt-2 pt-2 border-t border-stone-800/80 grid grid-cols-1 md:grid-cols-2 gap-1.5 sm:gap-2 md:gap-4">
           {/* CREATURE TYPE */}
-          <div className="flex items-center gap-1.5 md:gap-2 flex-wrap text-xs">
-            <span className="text-stone-400 font-bold uppercase tracking-wider text-[11px]">Creature Type:</span>
+          <div className="flex items-center gap-1 sm:gap-1.5 md:gap-2 flex-wrap text-xs">
+            <span className="text-stone-400 font-bold uppercase tracking-wider text-[10px] sm:text-[11px]">Type:</span>
             {Object.entries(CreatureIcons).map(([typeKey, label]) => (
               <button
                 key={typeKey}
                 onClick={() => handleCreatureTypeChange(typeKey as CreatureType)}
-                className={`px-2.5 py-1 rounded-lg border font-bold transition-all text-xs cursor-pointer ${
+                className={`px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg border font-bold transition-all text-[11px] sm:text-xs cursor-pointer ${
                   creatureType === typeKey 
                     ? 'bg-amber-600 border-amber-400 text-white shadow-[0_0_10px_rgba(245,158,11,0.5)] scale-105' 
                     : 'bg-stone-800 border-stone-700 text-stone-300 hover:bg-stone-700'
@@ -227,25 +227,25 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
                 {label}
               </button>
             ))}
-            <span className="text-[10px] text-stone-400 font-mono ml-1">
-              ({compatibleCount} compatible cards)
+            <span className="text-[10px] text-stone-400 font-mono ml-0.5">
+              ({compatibleCount})
             </span>
           </div>
 
           {/* CREATURE SIZE */}
-          <div className="flex items-center gap-1.5 md:gap-2 flex-wrap text-xs md:justify-end">
-            <span className="text-stone-400 font-bold uppercase tracking-wider text-[11px]">Size:</span>
+          <div className="flex items-center gap-1 sm:gap-1.5 md:gap-2 flex-wrap text-xs md:justify-end">
+            <span className="text-stone-400 font-bold uppercase tracking-wider text-[10px] sm:text-[11px]">Size:</span>
             {(['Small', 'Medium', 'Big'] as const).map(s => (
               <button
                 key={s}
                 onClick={() => setSize(s)}
-                className={`px-2.5 py-1 rounded-lg border font-bold transition-all text-xs cursor-pointer ${
+                className={`px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg border font-bold transition-all text-[11px] sm:text-xs cursor-pointer ${
                   size === s 
                     ? 'bg-green-600 border-green-400 text-white shadow-[0_0_10px_rgba(34,197,94,0.5)] scale-105' 
                     : 'bg-stone-800 border-stone-700 text-stone-300 hover:bg-stone-700'
                 }`}
               >
-                {s === 'Small' ? 'Small (10 HP, 4 ST)' : s === 'Medium' ? 'Medium (15 HP, 3 ST)' : 'Big (20 HP, 2 ST)'}
+                {s === 'Small' ? 'Small (10HP/4ST)' : s === 'Medium' ? 'Med (15HP/3ST)' : 'Big (20HP/2ST)'}
               </button>
             ))}
           </div>
@@ -253,7 +253,7 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
       </header>
 
       {/* SCROLLABLE MAIN CONTENT WRAPPER */}
-      <div className="flex-1 min-h-0 overflow-y-auto w-full overscroll-contain">
+      <div className="flex-1 min-h-0 overflow-y-auto w-full overscroll-contain touch-pan-y">
         <div className="max-w-7xl mx-auto flex flex-col">
           {/* SELECTED CARDS TRAY */}
           <section className="bg-stone-900/80 border-b border-stone-800 p-3 md:p-4 shadow-inner">
@@ -516,7 +516,7 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
       </div>
 
       {/* FOOTER (FIXED AT BOTTOM) */}
-      <footer className="bg-stone-900 border-t border-stone-800 p-3 md:p-4 shadow-2xl shrink-0 z-20">
+      <footer className="bg-stone-900 border-t border-stone-800 p-2.5 sm:p-3 md:p-4 shadow-2xl shrink-0 z-20 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-3">
           <div className="text-xs text-stone-400 text-center sm:text-left">
             <span className="font-bold text-white">{playerName}</span> • Deck: <span className="font-bold text-amber-400">{selectedCards.length}/{OPTIMAL_DECK_SIZE} Cards</span> • Creature: <span className="font-bold text-green-400">{creatureType} ({size})</span>

@@ -253,8 +253,8 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-stone-950 flex flex-col items-center justify-center p-4 text-white relative">
-      <div className="max-w-xl w-full bg-stone-900 border border-stone-800 rounded-3xl shadow-2xl p-6 md:p-8 animate-fade-in relative z-10">
+    <div className="min-h-[100dvh] bg-stone-950 flex flex-col items-center justify-start sm:justify-center p-3 sm:p-4 py-6 sm:py-10 text-white relative overflow-y-auto overscroll-contain">
+      <div className="max-w-xl w-full bg-stone-900 border border-stone-800 rounded-3xl shadow-2xl p-4 sm:p-6 md:p-8 animate-fade-in relative z-10 my-auto">
         
         {/* Header */}
         <div className="flex items-center justify-between mb-5 border-b border-stone-800 pb-4">

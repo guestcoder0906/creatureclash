@@ -452,10 +452,18 @@ export const Game: React.FC<GameProps> = ({
     const card = getCardByInstanceId(inspectCardId);
     if (!card) return null;
     return (
-      <div className="fixed inset-0 z-[150] bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in" onClick={() => setInspectCardId(null)}>
-        <div className="relative transform scale-110 md:scale-150 origin-center" onClick={e => e.stopPropagation()}>
-          <Card defId={card.defId} instanceId={card.instanceId} charges={card.charges} isSelected={false} noHover={true} />
-          <button onClick={() => setInspectCardId(null)} className="absolute -top-6 -right-6 bg-stone-700 text-white border border-stone-500 rounded-full w-8 h-8 flex items-center justify-center font-bold hover:bg-stone-600 shadow-lg">✕</button>
+      <div className="fixed inset-0 z-[150] bg-black/85 flex flex-col items-center justify-center p-4 backdrop-blur-md animate-fade-in" onClick={() => setInspectCardId(null)}>
+        <div className="relative flex flex-col items-center max-w-[90vw] max-h-[85vh] p-2" onClick={e => e.stopPropagation()}>
+          <button 
+            onClick={() => setInspectCardId(null)} 
+            className="self-end mb-2 bg-stone-800 text-white border border-stone-600 rounded-full w-9 h-9 flex items-center justify-center font-bold text-base hover:bg-stone-700 shadow-lg active:scale-95 cursor-pointer"
+            aria-label="Close"
+          >
+            ✕
+          </button>
+          <div className="transform scale-105 sm:scale-125 md:scale-150 origin-top">
+            <Card defId={card.defId} instanceId={card.instanceId} charges={card.charges} isSelected={false} noHover={true} />
+          </div>
         </div>
       </div>
     );
@@ -464,15 +472,15 @@ export const Game: React.FC<GameProps> = ({
   const StatusInfoOverlay = () => {
     if (!showStatusInfo) return null;
     return (
-      <div className="fixed inset-0 z-[160] bg-black/90 flex items-center justify-center p-6 backdrop-blur-md animate-fade-in" onClick={() => setShowStatusInfo(false)}>
-          <div className="bg-stone-800 border-2 border-stone-600 rounded-xl max-w-lg w-full max-h-[80vh] overflow-y-auto shadow-2xl p-6 relative" onClick={e => e.stopPropagation()}>
-              <button onClick={() => setShowStatusInfo(false)} className="absolute top-4 right-4 text-stone-400 hover:text-white font-bold text-xl">✕</button>
-              <h2 className="text-2xl font-bold text-amber-500 mb-6 border-b border-stone-700 pb-2">Status Effects</h2>
-              <div className="space-y-4">
+      <div className="fixed inset-0 z-[160] bg-black/90 flex items-center justify-center p-4 sm:p-6 backdrop-blur-md animate-fade-in" onClick={() => setShowStatusInfo(false)}>
+          <div className="bg-stone-800 border-2 border-stone-600 rounded-2xl max-w-lg w-full max-h-[85vh] overflow-y-auto overscroll-contain shadow-2xl p-4 sm:p-6 relative" onClick={e => e.stopPropagation()}>
+              <button onClick={() => setShowStatusInfo(false)} className="absolute top-4 right-4 text-stone-400 hover:text-white font-bold text-xl p-1 cursor-pointer">✕</button>
+              <h2 className="text-xl sm:text-2xl font-bold text-amber-500 mb-4 border-b border-stone-700 pb-2">Status Effects Guide</h2>
+              <div className="space-y-3.5">
                   {Object.entries(STATUS_DESCRIPTIONS).map(([name, desc]) => (
-                      <div key={name} className="flex flex-col">
-                          <div className="font-bold text-lg text-white">{name}</div>
-                          <div className="text-stone-400 text-sm">{desc}</div>
+                      <div key={name} className="flex flex-col bg-stone-900/60 p-2.5 rounded-lg border border-stone-700/50">
+                          <div className="font-bold text-sm sm:text-base text-amber-300">{name}</div>
+                          <div className="text-stone-300 text-xs sm:text-sm mt-0.5 leading-relaxed">{desc}</div>
                       </div>
                   ))}
               </div>
@@ -605,24 +613,24 @@ export const Game: React.FC<GameProps> = ({
   };
 
   const PlayerStats = ({ p, isOpponent }: { p: PlayerState, isOpponent?: boolean }) => (
-    <div className={`flex items-center gap-2 text-xs md:text-sm bg-black/60 p-2 md:p-2.5 rounded-xl border border-white/10 w-full justify-between shadow-md shrink-0 ${isOpponent ? 'flex-row-reverse' : ''}`}>
-      <div className={`flex items-center gap-2 max-w-[200px] md:max-w-[320px] ${isOpponent ? 'flex-row-reverse' : ''}`}>
-        <div className="font-black text-amber-400 truncate flex items-center gap-1.5 text-xs md:text-sm">
-          <span>{p.name}</span>
-          {!isOpponent && <button onClick={() => setShowStatusInfo(true)} className="w-4 h-4 rounded-full bg-stone-700 text-white text-[9px] flex items-center justify-center border border-stone-500 hover:bg-stone-600 cursor-pointer" title="Status Info">?</button>}
+    <div className={`flex flex-wrap sm:flex-nowrap items-center gap-1.5 sm:gap-2 text-xs md:text-sm bg-black/60 p-1.5 sm:p-2 md:p-2.5 rounded-xl border border-white/10 w-full justify-between shadow-md shrink-0 ${isOpponent ? 'flex-row-reverse' : ''}`}>
+      <div className={`flex items-center gap-1.5 sm:gap-2 max-w-[200px] sm:max-w-[240px] md:max-w-[320px] ${isOpponent ? 'flex-row-reverse' : ''}`}>
+        <div className="font-black text-amber-400 truncate flex items-center gap-1 text-xs sm:text-sm">
+          <span className="truncate max-w-[85px] sm:max-w-none">{p.name}</span>
+          {!isOpponent && <button onClick={() => setShowStatusInfo(true)} className="w-4 h-4 rounded-full bg-stone-700 text-white text-[9px] flex items-center justify-center border border-stone-500 hover:bg-stone-600 cursor-pointer shrink-0" title="Status Info">?</button>}
         </div>
-        <div className="px-2 py-0.5 rounded-full bg-stone-850 border border-stone-700 text-[10px] md:text-xs font-bold text-amber-200 flex items-center gap-1 shrink-0 shadow-inner">
+        <div className="px-1.5 sm:px-2 py-0.5 rounded-full bg-stone-850 border border-stone-700 text-[10px] md:text-xs font-bold text-amber-200 flex items-center gap-1 shrink-0 shadow-inner">
           <span>{CREATURE_ICONS[p.creatureType] || p.creatureType}</span>
           <span className="text-stone-400 font-normal">({p.size})</span>
         </div>
       </div>
-      <div className="flex gap-3 font-mono text-xs md:text-sm font-black">
-        <span className="text-red-400 drop-shadow-sm">HP:{p.hp}/{p.maxHp}</span>
-        <span className="text-yellow-400 drop-shadow-sm">ST:{p.stamina}/{p.maxStamina}</span>
+      <div className="flex gap-1.5 sm:gap-2.5 font-mono text-[11px] sm:text-xs md:text-sm font-black items-center">
+        <span className="px-1.5 py-0.5 rounded bg-red-950/60 border border-red-800/60 text-red-400 drop-shadow-sm whitespace-nowrap">HP {p.hp}/{p.maxHp}</span>
+        <span className="px-1.5 py-0.5 rounded bg-yellow-950/60 border border-yellow-800/60 text-yellow-300 drop-shadow-sm whitespace-nowrap">ST {p.stamina}/{p.maxStamina}</span>
       </div>
-      <div className="flex gap-1 overflow-hidden max-w-[90px] md:max-w-[150px] flex-wrap justify-end">
+      <div className="flex gap-1 overflow-hidden max-w-[120px] sm:max-w-[150px] flex-wrap justify-end">
         {p.statuses.map((s, i) => (
-          <span key={i} className={`px-1.5 py-0.5 rounded text-[9px] font-bold border shadow-sm truncate max-w-full ${
+          <span key={i} className={`px-1.5 py-0.5 rounded text-[8.5px] sm:text-[9px] font-bold border shadow-sm truncate max-w-full ${
              s.type === 'Poisoned' ? 'bg-green-900 border-green-500 text-green-100' : 
              s.type === 'Leeched' ? 'bg-lime-900 border-lime-500 text-lime-100' : 
              s.type === 'Grappled' ? 'bg-orange-900 border-orange-500 text-orange-100' : 
@@ -679,7 +687,7 @@ export const Game: React.FC<GameProps> = ({
   );
 
   return (
-    <div className="flex flex-col md:flex-row min-h-screen w-full bg-stone-900 select-none font-sans">
+    <div className="flex flex-col md:flex-row h-[100dvh] max-h-[100dvh] w-full bg-stone-900 select-none font-sans overflow-hidden">
       <style>{`
         @keyframes spin-y { 0% { transform: rotateX(0deg); } 100% { transform: rotateX(1080deg); } }
         .animate-spin-y { animation: spin-y 1s infinite linear; }
@@ -692,8 +700,8 @@ export const Game: React.FC<GameProps> = ({
       <StatusInfoOverlay />
       <DeckViewOverlay />
       {activeEmote && (
-        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[195] bg-black/85 border border-amber-400 px-5 py-2.5 rounded-full shadow-[0_0_30px_rgba(245,158,11,0.5)] animate-bounce flex items-center gap-2 pointer-events-none">
-          <span className="text-3xl">{activeEmote.emote}</span>
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[195] bg-black/85 border border-amber-400 px-4 py-2 rounded-full shadow-[0_0_30px_rgba(245,158,11,0.5)] animate-bounce flex items-center gap-2 pointer-events-none">
+          <span className="text-2xl">{activeEmote.emote}</span>
           <span className="text-xs font-black text-amber-300 uppercase tracking-wider">{activeEmote.senderName}</span>
         </div>
       )}
@@ -707,7 +715,7 @@ export const Game: React.FC<GameProps> = ({
           </div>
       )}
 
-      <div className="fixed top-16 right-4 z-[150] flex flex-col items-end pointer-events-none space-y-2 max-w-[90%]">
+      <div className="fixed top-14 right-3 z-[150] flex flex-col items-end pointer-events-none space-y-2 max-w-[90%]">
         {state.notifications.map(n => (
             <NotificationToast 
                 key={n.id} 
@@ -718,7 +726,7 @@ export const Game: React.FC<GameProps> = ({
       </div>
 
       {evolveMode !== 'none' && (
-          <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[160] w-max max-w-[90%] bg-fuchsia-900/90 border-2 border-fuchsia-500 px-4 py-2 md:px-6 md:py-3 rounded-full shadow-[0_0_20px_rgba(217,70,239,0.6)] animate-bounce text-white font-bold text-sm md:text-lg pointer-events-none backdrop-blur-md text-center">
+          <div className="fixed top-16 left-1/2 -translate-x-1/2 z-[160] w-max max-w-[90%] bg-fuchsia-900/90 border-2 border-fuchsia-500 px-4 py-2 rounded-full shadow-[0_0_20px_rgba(217,70,239,0.6)] animate-bounce text-white font-bold text-xs sm:text-sm md:text-base pointer-events-none backdrop-blur-md text-center">
               {evolveMode === 'select-formation' ? 'Select a card to REMOVE from formation' : 
                evolveMode === 'select-apex-target' ? 'Select a card to UPGRADE (Free Action)' : 
                'Select a card from HAND to add'}
@@ -726,14 +734,75 @@ export const Game: React.FC<GameProps> = ({
       )}
 
       {/* HEADER / MOBILE INFO */}
-      <div className="md:hidden flex justify-between items-center p-2 bg-stone-900 border-b border-stone-800 text-xs shadow-md z-40 relative shrink-0">
-        <span className="text-stone-400 font-mono font-bold">TURN {state.turn}</span>
-        <h1 className="text-amber-500 font-black uppercase tracking-widest text-sm">Creature Clash</h1>
-        <div className="flex gap-2">
-          {onExit && (
-            <button onClick={onExit} className="px-2 py-1 bg-stone-800 border border-stone-700 rounded text-stone-400 hover:text-white">MENU</button>
+      <div className="md:hidden flex justify-between items-center px-3 py-2 bg-stone-950/95 border-b border-stone-800 text-xs shadow-md z-40 relative shrink-0">
+        <div className="flex items-center gap-2">
+          <span className="text-amber-400 font-mono font-black text-xs">T{state.turn}</span>
+          <span className="text-[11px] px-1.5 py-0.5 rounded bg-stone-900 border border-stone-700 text-stone-200 font-bold" title={state.habitat}>
+            {habitatStyle.emoji} {state.habitat}
+          </span>
+          {isMultiplayer ? (
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="Online PvP" />
+          ) : (
+            <span className="text-[10px] text-stone-400 font-mono">VS BOT</span>
           )}
-          <button onClick={() => setShowLog(!showLog)} className="px-3 py-1 bg-stone-800 border border-stone-700 rounded hover:bg-stone-700 text-stone-300">LOG</button>
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <button 
+            onClick={() => setShowDeckModal(true)} 
+            className="px-2 py-1 bg-stone-900 border border-stone-700 rounded text-amber-300 font-mono text-[11px] hover:bg-stone-800 active:scale-95 cursor-pointer"
+            title="View remaining cards in deck"
+          >
+            🎴 {me.deck.length}
+          </button>
+          <button 
+            onClick={() => setShowStatusInfo(true)} 
+            className="w-7 h-7 flex items-center justify-center bg-stone-900 border border-stone-700 rounded text-stone-300 font-bold text-xs hover:bg-stone-800 active:scale-95 cursor-pointer"
+            title="Status effects guide"
+          >
+            ℹ️
+          </button>
+          {isMultiplayer && onSendEmote && (
+            <div className="relative">
+              <button 
+                onClick={() => setShowEmotePicker(!showEmotePicker)} 
+                className="w-7 h-7 flex items-center justify-center bg-stone-900 border border-stone-700 rounded text-stone-300 font-bold text-xs hover:bg-stone-800 active:scale-95 cursor-pointer"
+                title="Send emote"
+              >
+                💬
+              </button>
+              {showEmotePicker && (
+                <div className="absolute right-0 top-9 z-50 bg-stone-900 border border-stone-700 rounded-xl p-2 shadow-2xl flex gap-1 animate-fade-in">
+                  {EMOTE_LIST.map((em) => (
+                    <button
+                      key={em}
+                      onClick={() => {
+                        onSendEmote(em);
+                        setShowEmotePicker(false);
+                      }}
+                      className="text-lg hover:scale-125 transition-transform p-1 cursor-pointer"
+                    >
+                      {em}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          <button 
+            onClick={() => setShowLog(!showLog)} 
+            className="px-2.5 py-1 bg-stone-800 border border-stone-700 rounded text-stone-200 font-bold text-xs hover:bg-stone-700 active:scale-95 cursor-pointer"
+          >
+            LOG
+          </button>
+          {onExit && (
+            <button 
+              onClick={onExit} 
+              className="px-2 py-1 bg-stone-900 border border-stone-700 rounded text-stone-400 hover:text-white text-xs font-bold active:scale-95 cursor-pointer"
+            >
+              MENU
+            </button>
+          )}
         </div>
       </div>
 
@@ -859,17 +928,17 @@ export const Game: React.FC<GameProps> = ({
         </div>
       )}
 
-      {/* GAME BOARD */}
-      <div className={`flex-1 flex flex-col relative bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] ${habitatStyle.bg} transition-colors duration-1000`}>
+      {/* GAME BOARD - FULLY SCROLLABLE ON MOBILE */}
+      <div className={`flex-1 flex flex-col relative bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] ${habitatStyle.bg} transition-colors duration-1000 overflow-y-auto overscroll-contain touch-pan-y`}>
         
         {/* BOARD CONTENT */}
-        <div className="flex-1 flex flex-col min-h-0 justify-between">
+        <div className="flex-1 flex flex-col min-h-min justify-between p-1.5 sm:p-2 md:p-3 gap-2">
             {/* OPPONENT AREA */}
-            <div className="flex-1 flex flex-col p-2 md:p-3 bg-black/30 border-b border-white/5 min-h-min shrink-0 justify-center transition-colors duration-500 shadow-lg gap-2">
+            <div className="flex flex-col p-2 md:p-3 bg-black/30 border-b border-white/5 rounded-xl shrink-0 shadow-lg gap-2">
                <PlayerStats p={opponent} isOpponent />
-               <div className="flex justify-center -space-x-3 md:-space-x-4 my-1 md:my-3 opacity-80">
+               <div className="flex justify-center -space-x-2.5 sm:-space-x-3 md:-space-x-4 my-1 md:my-2 opacity-80">
                  {opponent.hand.map((_, i) => (
-                   <div key={i} className="w-8 h-12 md:w-12 md:h-16 bg-stone-800 border border-stone-600 rounded shadow-lg transform hover:-translate-y-2 transition-transform" />
+                   <div key={i} className="w-7 h-10 sm:w-8 sm:h-12 md:w-12 md:h-16 bg-stone-800 border border-stone-600 rounded-md shadow-md transform hover:-translate-y-1 transition-transform" />
                  ))}
                </div>
                <FormationArea p={opponent} isSelf={false} />
@@ -896,64 +965,77 @@ export const Game: React.FC<GameProps> = ({
             </div>
 
             {/* PLAYER AREA */}
-            <div className="flex-1 flex flex-col p-2 md:p-3 justify-end gap-2 md:gap-3 bg-gradient-to-t from-stone-950 via-stone-900/50 to-transparent min-h-min">
+            <div className="flex flex-col p-2 md:p-3 justify-end gap-2 md:gap-3 bg-gradient-to-t from-stone-950 via-stone-900/50 to-transparent shrink-0">
                <FormationArea p={me} isSelf={true} />
                <PlayerStats p={me} />
                
-               <div className="flex gap-3 px-1 justify-end min-h-[28px] md:min-h-[32px]">
+               <div className="flex gap-2 sm:gap-3 px-1 justify-end flex-wrap min-h-[28px]">
                   {isPoisoned && isMyTurn && !isInterrupted && (
-                    <button onClick={clearPoison} className="px-3 py-1 md:px-4 bg-green-800 text-green-100 text-[10px] md:text-xs font-bold rounded border border-green-600 hover:bg-green-700 animate-pulse shadow-lg hover:scale-105 transition-transform">🧪 Cure Poison (1 Stam)</button>
+                    <button onClick={clearPoison} className="px-2.5 py-1 sm:px-3 sm:py-1.5 bg-green-800 text-green-100 text-[10px] sm:text-xs font-bold rounded-lg border border-green-600 hover:bg-green-700 animate-pulse shadow-lg active:scale-95 transition cursor-pointer">🧪 Cure Poison (1 Stam)</button>
                   )}
                   {isLeeched && isMyTurn && !isInterrupted && (
-                    <button onClick={clearLeech} className="px-3 py-1 md:px-4 bg-lime-800 text-lime-100 text-[10px] md:text-xs font-bold rounded border border-lime-600 hover:bg-lime-700 animate-pulse shadow-lg hover:scale-105 transition-transform">🦟 Remove Leech (1 Stam)</button>
+                    <button onClick={clearLeech} className="px-2.5 py-1 sm:px-3 sm:py-1.5 bg-lime-800 text-lime-100 text-[10px] sm:text-xs font-bold rounded-lg border border-lime-600 hover:bg-lime-700 animate-pulse shadow-lg active:scale-95 transition cursor-pointer">🦟 Remove Leech (1 Stam)</button>
                   )}
                   {evolveMode !== 'none' && (
-                     <button onClick={() => {setEvolveMode('none'); setEvolveCardId(null); setEvolveTargetId(null);}} className="px-3 py-1 md:px-4 bg-stone-700 text-white text-[10px] md:text-xs font-bold rounded border border-stone-500 hover:bg-stone-600 shadow-lg">Cancel Selection</button>
+                     <button onClick={() => {setEvolveMode('none'); setEvolveCardId(null); setEvolveTargetId(null);}} className="px-2.5 py-1 sm:px-3 sm:py-1.5 bg-stone-700 text-white text-[10px] sm:text-xs font-bold rounded-lg border border-stone-500 hover:bg-stone-600 shadow-lg active:scale-95 cursor-pointer">Cancel Selection</button>
                   )}
                </div>
                
-               {/* HAND */}
-               <div className={`flex gap-2 md:gap-3 overflow-x-auto pb-2 md:pb-4 px-2 items-end min-h-[130px] md:min-h-[160px] scrollbar-hide shrink-0 ${evolveMode === 'select-hand' ? 'bg-fuchsia-900/30 ring-2 ring-fuchsia-500 rounded-lg' : ''}`}>
-                  {me.hand.map(c => (
-                    <Card 
-                      key={c.instanceId} 
-                      defId={c.defId}
-                      instanceId={c.instanceId}
-                      isPlayable={isMyTurn && evolveMode === 'none' && !isInterrupted}
-                      isSelected={selectedCardId === c.instanceId || evolveCardId === c.instanceId}
-                      onClick={() => handleCardClick(c.instanceId, 'hand', me.id)}
-                    />
-                  ))}
+               {/* HAND WITH TOUCH HORIZONTAL SCROLLING */}
+               <div className="flex flex-col gap-1">
+                 <div className="flex justify-between items-center px-1 text-[11px] text-stone-400">
+                   <span className="font-bold uppercase tracking-wider text-[10px] text-stone-300">Your Hand ({me.hand.length})</span>
+                   {me.hand.length > 3 && (
+                     <span className="text-[10px] text-amber-400/80 font-mono flex items-center gap-1 md:hidden">
+                       ↔ Swipe to view cards
+                     </span>
+                   )}
+                 </div>
+                 <div className={`flex gap-2 sm:gap-2.5 md:gap-3 overflow-x-auto pb-3 pt-1 px-1 items-end min-h-[145px] sm:min-h-[160px] md:min-h-[185px] touch-pan-x scrollbar-thin scrollbar-thumb-stone-700 ${evolveMode === 'select-hand' ? 'bg-fuchsia-900/30 ring-2 ring-fuchsia-500 rounded-xl p-1.5' : ''}`}>
+                    {me.hand.map(c => (
+                      <Card 
+                        key={c.instanceId} 
+                        defId={c.defId}
+                        instanceId={c.instanceId}
+                        isPlayable={isMyTurn && evolveMode === 'none' && !isInterrupted}
+                        isSelected={selectedCardId === c.instanceId || evolveCardId === c.instanceId}
+                        onClick={() => handleCardClick(c.instanceId, 'hand', me.id)}
+                      />
+                    ))}
+                 </div>
                </div>
             </div>
         </div>
 
-        {/* CONTROLS TOOLBAR - STICKY AT BOTTOM */}
-        <div className="sticky bottom-0 grid grid-cols-5 gap-1 md:gap-2 p-2 md:p-3 bg-stone-950 border-t border-stone-800 shadow-[0_-10px_30px_rgba(0,0,0,0.5)] z-30 shrink-0">
+        {/* CONTROLS TOOLBAR - STICKY AT BOTTOM WITH SAFE AREA PADDING */}
+        <div className="sticky bottom-0 grid grid-cols-5 gap-1 sm:gap-1.5 md:gap-2 p-1.5 sm:p-2 md:p-3 bg-stone-950/95 backdrop-blur-md border-t border-stone-800 shadow-[0_-10px_30px_rgba(0,0,0,0.7)] z-30 shrink-0 pb-[max(env(safe-area-inset-bottom),0.5rem)]">
            {isMyTurn && !state.winner && !isInterrupted ? (
              <>
                <button 
                  onClick={() => setInspectCardId(selectedCardId)}
                  disabled={!selectedCardId}
-                 className="rounded-lg py-2 md:py-3 bg-stone-700 text-stone-300 font-bold text-[10px] md:text-sm hover:bg-stone-600 transition-all active:scale-95 disabled:opacity-30 border border-stone-500"
+                 className="rounded-lg sm:rounded-xl min-h-[44px] py-1.5 sm:py-2.5 md:py-3 bg-stone-700 text-stone-300 font-bold text-[10px] sm:text-xs md:text-sm hover:bg-stone-600 transition-all active:scale-95 disabled:opacity-30 border border-stone-500 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 cursor-pointer"
                >
-                 INSPECT
+                 <span>🔍</span>
+                 <span>INSPECT</span>
                </button>
 
                <button 
                  disabled={!selectedCardId || !isSelectedInHand || !canPlaySelected()}
                  onClick={playSelected}
-                 className={`rounded-lg py-2 md:py-3 font-black text-[10px] md:text-sm transition-all active:scale-95 disabled:opacity-30 disabled:scale-100 ${isSelectedInHand ? (canUpgrade ? (upgradeTargetInFormation ? 'bg-amber-600 text-white hover:bg-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.5)]' : 'bg-stone-800 text-stone-500 cursor-not-allowed') : (selectedDef?.id === CardId.AdrenalineRush || selectedDef?.id === CardId.ShortBurst) ? 'bg-amber-600 text-white hover:bg-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.5)] animate-pulse' : selectedDef?.type === CardType.Special ? 'bg-fuchsia-600 text-white hover:bg-fuchsia-500 shadow-[0_0_15px_rgba(217,70,239,0.4)]' : 'bg-blue-600 text-white hover:bg-blue-500 shadow-[0_0_15px_rgba(37,99,235,0.4)]') : 'bg-stone-800 text-stone-500'}`}
+                 className={`rounded-lg sm:rounded-xl min-h-[44px] py-1.5 sm:py-2.5 md:py-3 font-black text-[9.5px] sm:text-xs md:text-sm transition-all active:scale-95 disabled:opacity-30 disabled:scale-100 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 cursor-pointer ${isSelectedInHand ? (canUpgrade ? (upgradeTargetInFormation ? 'bg-amber-600 text-white hover:bg-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.5)]' : 'bg-stone-800 text-stone-500 cursor-not-allowed') : (selectedDef?.id === CardId.AdrenalineRush || selectedDef?.id === CardId.ShortBurst) ? 'bg-amber-600 text-white hover:bg-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.5)] animate-pulse' : selectedDef?.type === CardType.Special ? 'bg-fuchsia-600 text-white hover:bg-fuchsia-500 shadow-[0_0_15px_rgba(217,70,239,0.4)]' : 'bg-blue-600 text-white hover:bg-blue-500 shadow-[0_0_15px_rgba(37,99,235,0.4)]') : 'bg-stone-800 text-stone-500'}`}
                >
-                 {canUpgrade ? (upgradeTargetInFormation ? `UPGRADE ${CARDS[upgradeTargetInFormation.defId].name.toUpperCase()}${isPayingStaminaForExtra ? ' (-2 ⚡)' : ''}` : 'SELECT TARGET') : selectedDef?.id === CardId.Evolve ? 'EVOLVE (2 ⚡)' : selectedDef?.id === CardId.AdrenalineRush ? 'USE (+1 ⚡)' : selectedDef?.id === CardId.ShortBurst ? 'USE (+1 ⚡)' : isPayingStaminaForExtra ? 'EXTRA PLAY (-2 ⚡)' : 'PLAY CARD'}
+                 <span>🃏</span>
+                 <span className="truncate">{canUpgrade ? (upgradeTargetInFormation ? `UPGRADE` : 'SELECT') : selectedDef?.id === CardId.Evolve ? 'EVOLVE' : selectedDef?.id === CardId.AdrenalineRush ? 'USE' : selectedDef?.id === CardId.ShortBurst ? 'USE' : isPayingStaminaForExtra ? 'EXTRA (-2⚡)' : 'PLAY'}</span>
                </button>
                
                <button 
                  disabled={!selectedCardId || !isSelectedInFormation || selectedDef?.type !== CardType.Physical || !ACTIVE_PHYSICALS.includes(selectedDef?.id as CardId) || isAttackBlocked || !hasEnoughAttackStamina}
                  onClick={() => handleAction('ATTACK')}
-                 className={`rounded-lg py-2 md:py-3 font-black text-[10px] md:text-sm transition-all active:scale-95 disabled:opacity-30 disabled:scale-100 ${isSelectedInFormation && selectedDef?.type === CardType.Physical && !isAttackBlocked && hasEnoughAttackStamina ? 'bg-red-600 text-white hover:bg-red-500 shadow-[0_0_15px_rgba(220,38,38,0.4)]' : 'bg-stone-800 text-stone-500'}`}
+                 className={`rounded-lg sm:rounded-xl min-h-[44px] py-1.5 sm:py-2.5 md:py-3 font-black text-[10px] sm:text-xs md:text-sm transition-all active:scale-95 disabled:opacity-30 disabled:scale-100 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 cursor-pointer ${isSelectedInFormation && selectedDef?.type === CardType.Physical && !isAttackBlocked && hasEnoughAttackStamina ? 'bg-red-600 text-white hover:bg-red-500 shadow-[0_0_15px_rgba(220,38,38,0.4)]' : 'bg-stone-800 text-stone-500'}`}
                >
-                 {isSelectedInFormation && selectedDef?.type === CardType.Physical && isAttackBlocked ? 'ATTACK USED' : (selectedDef?.id === CardId.Camouflage || selectedDef?.id === CardId.SwimFast) ? 'ACTION' : 'ATTACK'}
+                 <span>⚔️</span>
+                 <span className="truncate">{isSelectedInFormation && selectedDef?.type === CardType.Physical && isAttackBlocked ? 'ATTACKED' : (selectedDef?.id === CardId.Camouflage || selectedDef?.id === CardId.SwimFast) ? 'ACTION' : 'ATTACK'}</span>
                </button>
 
                <button 
@@ -965,31 +1047,35 @@ export const Game: React.FC<GameProps> = ({
                      handleAction('ABILITY');
                    }
                  }}
-                 className={`rounded-lg py-2 md:py-3 font-black text-[10px] md:text-sm transition-all active:scale-95 disabled:opacity-30 disabled:scale-100 ${canUseSelectedAbility() ? 'bg-purple-600 text-white hover:bg-purple-500 shadow-[0_0_15px_rgba(147,51,234,0.4)]' : 'bg-stone-800 text-stone-500'}`}
+                 className={`rounded-lg sm:rounded-xl min-h-[44px] py-1.5 sm:py-2.5 md:py-3 font-black text-[9.5px] sm:text-xs md:text-sm transition-all active:scale-95 disabled:opacity-30 disabled:scale-100 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 cursor-pointer ${canUseSelectedAbility() ? 'bg-purple-600 text-white hover:bg-purple-500 shadow-[0_0_15px_rgba(147,51,234,0.4)]' : 'bg-stone-800 text-stone-500'}`}
                >
-                 {isAbilityCard && isSelectedAbilityUsed 
-                   ? 'USED (1/Turn)' 
-                   : isAbilityCard && isAbilityBlocked 
-                   ? 'ABILITY USED' 
-                   : isHibernate && isHealingHibernate 
-                   ? 'HEAL 2 HP (2 ⚡)' 
-                   : isHibernate && !isHealingHibernate 
-                   ? '+2 STAMINA (1 ⚡)' 
-                   : isHandInstantAbility
-                   ? 'USE (+1 ST)'
-                   : 'ABILITY'}
+                 <span>✨</span>
+                 <span className="truncate">
+                   {isAbilityCard && isSelectedAbilityUsed 
+                     ? 'USED' 
+                     : isAbilityCard && isAbilityBlocked 
+                     ? 'USED' 
+                     : isHibernate && isHealingHibernate 
+                     ? 'HEAL (2⚡)' 
+                     : isHibernate && !isHealingHibernate 
+                     ? '+2 ST (1⚡)' 
+                     : isHandInstantAbility
+                     ? 'USE'
+                     : 'ABILITY'}
+                 </span>
                </button>
                
                <button 
                  onClick={endTurn}
-                 className="rounded-lg py-2 md:py-3 bg-stone-700 text-white font-black text-[10px] md:text-sm hover:bg-stone-600 transition-all active:scale-95 shadow-lg border border-stone-500"
+                 className="rounded-lg sm:rounded-xl min-h-[44px] py-1.5 sm:py-2.5 md:py-3 bg-stone-700 text-white font-black text-[10px] sm:text-xs md:text-sm hover:bg-stone-600 transition-all active:scale-95 shadow-lg border border-stone-500 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 cursor-pointer"
                >
-                 END TURN
+                 <span>⏭️</span>
+                 <span className="truncate">END TURN</span>
                </button>
              </>
            ) : (
-             <div className="col-span-5 text-center py-2 md:py-3 text-stone-500 italic text-xs md:text-sm bg-black/20 rounded-lg border border-white/5">
-               {state.winner ? 'GAME OVER' : isInterrupted ? 'ACTION IN PROGRESS...' : 'OPPONENT TURN...'}
+             <div className="col-span-5 text-center min-h-[44px] flex items-center justify-center py-2 text-stone-400 italic text-xs md:text-sm bg-black/40 rounded-xl border border-white/5">
+               {state.winner ? '🏆 GAME OVER' : isInterrupted ? '⏳ ACTION IN PROGRESS...' : '⏳ OPPONENT TURN...'}
              </div>
            )}
         </div>
