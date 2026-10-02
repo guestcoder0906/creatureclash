@@ -100,20 +100,15 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
     if (cfg.anonKey) setDevKey(cfg.anonKey);
   }, []);
 
-  // Track whether we are in game so we don't tear down the channel on unmount when starting battle
-  const inGameRef = useRef(false);
-  useEffect(() => {
-    inGameRef.current = connectionStatus === 'in_game';
-  }, [connectionStatus]);
-
-  // Cleanup multiplayer ONLY when unmounting the entire lobby component
+  // Cleanup multiplayer ONLY when unmounting the entire lobby without entering a game
   useEffect(() => {
     return () => {
-      if (!inGameRef.current) {
+      // NEVER tear down channel if the match has started!
+      if (!multiplayerService.isGameStarted()) {
         multiplayerService.leaveRoom();
       }
     };
-  }, []); // Run ONLY on unmount, never during renders or status transitions!
+  }, []); // Run ONLY on unmount!
 
   const handleSaveDevConfig = () => {
     if (!devUrl.trim() || !devKey.trim()) return;

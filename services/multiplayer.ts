@@ -456,15 +456,6 @@ export class MultiplayerManager {
       const channelToClose = this.channel;
       this.channel = null;
 
-      // Broadcast explicit close signal if we were in a game
-      if (this.gameStarted) {
-        channelToClose.send({
-          type: 'broadcast',
-          event: 'PLAYER_DISCONNECTED',
-          payload: { playerId: this.localPlayer?.id, explicitClose: true },
-        }).catch(() => {});
-      }
-
       const supabase = getSupabaseClient();
       if (supabase) {
         supabase.removeChannel(channelToClose);
@@ -476,6 +467,10 @@ export class MultiplayerManager {
     this.roomCode = '';
     this.opponentPlayer = null;
     this.gameStarted = false;
+  }
+
+  public isGameStarted(): boolean {
+    return this.gameStarted;
   }
 
   public getRoomCode(): string {
