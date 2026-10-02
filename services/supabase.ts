@@ -1,8 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const DEFAULT_DEMO_URL = 'https://tnqbbnhdwtqbblyovfhl.supabase.co';
-const DEFAULT_DEMO_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRucWJibmhkd3RxYmJseW92ZmhsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MDk4NTYwMDAsImV4cCI6MjAyNTQzMjAwMH0.wZ99K-hR_demo_anon_key_creature_clash';
-
 export interface SupabaseConfig {
   url: string;
   anonKey: string;
@@ -11,8 +8,19 @@ export interface SupabaseConfig {
 
 export const getStoredSupabaseConfig = (): SupabaseConfig => {
   const meta = import.meta as any;
-  const envUrl = meta.env?.VITE_SUPABASE_URL;
-  const envKey = meta.env?.VITE_SUPABASE_ANON_KEY;
+  const envUrl =
+    meta.env?.VITE_SUPABASE_URL ||
+    meta.env?.VITE_PUBLIC_SUPABASE_URL ||
+    meta.env?.NEXT_PUBLIC_SUPABASE_URL ||
+    meta.env?.SUPABASE_URL;
+
+  const envKey =
+    meta.env?.VITE_SUPABASE_ANON_KEY ||
+    meta.env?.VITE_SUPABASE_KEY ||
+    meta.env?.VITE_PUBLIC_SUPABASE_ANON_KEY ||
+    meta.env?.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    meta.env?.SUPABASE_ANON_KEY ||
+    meta.env?.SUPABASE_KEY;
 
   if (envUrl && envKey) {
     return {
@@ -48,7 +56,6 @@ export const saveSupabaseConfig = (url: string, anonKey: string) => {
     localStorage.removeItem('creature_clash_supabase_url');
     localStorage.removeItem('creature_clash_supabase_key');
   }
-  // Reset cached client
   cachedClient = null;
 };
 
@@ -67,13 +74,7 @@ export const getSupabaseClient = (): SupabaseClient | null => {
   }
 
   try {
-    cachedClient = createClient(config.url, config.anonKey, {
-      realtime: {
-        params: {
-          eventsPerSecond: 20,
-        },
-      },
-    });
+    cachedClient = createClient(config.url, config.anonKey);
     cachedConfigKey = keyString;
     return cachedClient;
   } catch (err) {

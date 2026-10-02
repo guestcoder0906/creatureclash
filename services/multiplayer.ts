@@ -39,6 +39,9 @@ export class MultiplayerManager {
   private localPlayer: RemotePlayerInfo | null = null;
   private opponentPlayer: RemotePlayerInfo | null = null;
   private callbacks: MultiplayerCallbacks | null = null;
+  private announceInterval: ReturnType<typeof setInterval> | null = null;
+  private startGameTimeout: ReturnType<typeof setTimeout> | null = null;
+  private gameStarted: boolean = false;
 
   public init(
     roomCode: string,
@@ -48,85 +51,120 @@ export class MultiplayerManager {
   ): boolean {
     const supabase = getSupabaseClient();
     if (!supabase) {
-      callbacks.onStatusChange('error', 'Supabase credentials are not configured.');
+      callbacks.onStatusChange(
+        'error',
+        'Supabase environment variables not found. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.'
+      );
       return false;
     }
 
     this.leaveRoom();
 
-    this.roomCode = roomCode.trim().toUpperCase();
+    this.roomCode = roomCode.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
     this.isHost = isHost;
     this.localPlayer = localPlayer;
+    this.opponentPlayer = null;
     this.callbacks = callbacks;
+    this.gameStarted = false;
 
     callbacks.onStatusChange('connecting', `Connecting to room ${this.roomCode}...`);
 
     try {
-      this.channel = supabase.channel(`clash_room_${this.roomCode}`, {
+      const channelTopic = `room_${this.roomCode}`;
+      this.channel = supabase.channel(channelTopic, {
         config: {
-          broadcast: { self: false },
+          broadcast: { ack: true, self: false },
           presence: { key: localPlayer.id },
         },
       });
 
-      // 1. Listen for Broadcast Events
+      // 1. Listen for Realtime Broadcast Events
       this.channel
-        .on('broadcast', { event: 'PLAYER_JOIN' }, (payload) => {
-          this.handlePlayerJoin(payload.payload as RemotePlayerInfo);
+        .on('broadcast', { event: 'PLAYER_ANNOUNCE' }, (payload) => {
+          const remotePlayer = payload.payload as RemotePlayerInfo;
+          if (remotePlayer && remotePlayer.id !== this.localPlayer?.id) {
+            this.handleOpponentFound(remotePlayer);
+            // Respond back so sender also has our info
+            if (this.localPlayer) {
+              this.broadcastEvent('PLAYER_ANNOUNCE', this.localPlayer);
+            }
+          }
         })
         .on('broadcast', { event: 'START_GAME' }, (payload) => {
           this.handleStartGame(payload.payload as { initialState: GameState });
         })
+        .on('broadcast', { event: 'START_GAME_ACK' }, () => {
+          if (this.startGameTimeout) {
+            clearTimeout(this.startGameTimeout);
+            this.startGameTimeout = null;
+          }
+        })
         .on('broadcast', { event: 'GAME_ACTION' }, (payload) => {
-          this.handleGameAction(payload.payload as { action: GameAction });
+          if (payload?.payload?.action) {
+            this.callbacks?.onRemoteAction(payload.payload.action);
+          }
         })
         .on('broadcast', { event: 'SYNC_STATE' }, (payload) => {
-          this.handleSyncState(payload.payload as { state: GameState });
+          if (payload?.payload?.state) {
+            this.callbacks?.onStateSync(payload.payload.state);
+          }
         })
         .on('broadcast', { event: 'EMOTE' }, (payload) => {
-          this.handleEmote(payload.payload as { emote: string; senderName: string });
+          if (payload?.payload?.emote) {
+            this.callbacks?.onEmoteReceived(payload.payload.emote, payload.payload.senderName || 'Opponent');
+          }
         })
         .on('broadcast', { event: 'REMATCH' }, () => {
           this.callbacks?.onRematchRequested();
         });
 
-      // 2. Presence tracking
+      // 2. Realtime Presence Tracking
       this.channel
         .on('presence', { event: 'sync' }, () => {
           this.handlePresenceSync();
         })
+        .on('presence', { event: 'join' }, ({ newPresences }) => {
+          this.processPresences(newPresences);
+        })
         .on('presence', { event: 'leave' }, ({ leftPresences }) => {
-          const opponentLeft = leftPresences.some((p: any) => p.playerId !== this.localPlayer?.id);
-          if (opponentLeft) {
-            this.callbacks?.onOpponentLeft();
-            if (this.isHost) {
-              this.callbacks?.onStatusChange('waiting_for_opponent', 'Opponent disconnected.');
-            }
+          const oppLeft = leftPresences.some((p: any) => p.playerId !== this.localPlayer?.id);
+          if (oppLeft) {
+            this.handleOpponentLeft();
           }
         });
 
-      // 3. Subscribe to channel
-      this.channel.subscribe(async (status) => {
+      // 3. Subscribe to Realtime Channel
+      this.channel.subscribe(async (status, err) => {
         if (status === 'SUBSCRIBED') {
-          // Track our own presence
+          // Track local player presence with full profile
           await this.channel?.track({
             playerId: localPlayer.id,
             name: localPlayer.name,
             creatureType: localPlayer.creatureType,
             size: localPlayer.size,
+            deckCards: localPlayer.deckCards,
             isHost: this.isHost,
-            onlineAt: new Date().toISOString(),
+            timestamp: Date.now(),
           });
 
+          // Immediate broadcast announcement
+          this.broadcastEvent('PLAYER_ANNOUNCE', this.localPlayer);
+
+          // Update initial status
           if (this.isHost) {
-            this.callbacks?.onStatusChange('waiting_for_opponent', `Room ${this.roomCode} created! Waiting for opponent...`);
+            this.callbacks?.onStatusChange('waiting_for_opponent', `Room ${this.roomCode} created! Waiting for challenger...`);
           } else {
-            // Guest tells host they have joined
-            this.broadcastEvent('PLAYER_JOIN', this.localPlayer);
-            this.callbacks?.onStatusChange('connecting', 'Joined room! Waiting for host to start...');
+            this.callbacks?.onStatusChange('connecting', `Joined room ${this.roomCode}! Waiting for host...`);
           }
+
+          // Periodic handshake until opponent is discovered
+          this.startAnnounceLoop();
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          this.callbacks?.onStatusChange('error', 'Failed to connect to Supabase Realtime.');
+          console.error('Supabase channel subscription failed:', status, err);
+          this.callbacks?.onStatusChange(
+            'error',
+            `Connection failed (${status}). Please check network connection.`
+          );
         } else if (status === 'CLOSED') {
           this.callbacks?.onStatusChange('disconnected', 'Disconnected from room.');
         }
@@ -134,9 +172,28 @@ export class MultiplayerManager {
 
       return true;
     } catch (err: any) {
-      console.error('Multiplayer initialization error:', err);
+      console.error('Multiplayer initialization exception:', err);
       callbacks.onStatusChange('error', err?.message || 'Error connecting to room');
       return false;
+    }
+  }
+
+  private startAnnounceLoop() {
+    this.stopAnnounceLoop();
+    this.announceInterval = setInterval(() => {
+      if (!this.opponentPlayer && this.channel && this.localPlayer) {
+        this.broadcastEvent('PLAYER_ANNOUNCE', this.localPlayer);
+        this.handlePresenceSync();
+      } else {
+        this.stopAnnounceLoop();
+      }
+    }, 2000);
+  }
+
+  private stopAnnounceLoop() {
+    if (this.announceInterval) {
+      clearInterval(this.announceInterval);
+      this.announceInterval = null;
     }
   }
 
@@ -145,25 +202,47 @@ export class MultiplayerManager {
     const state = this.channel.presenceState();
     const allPresences: any[] = [];
     Object.values(state).forEach((presences: any) => {
-      allPresences.push(...presences);
-    });
-
-    const opponent = allPresences.find((p) => p.playerId !== this.localPlayer?.id);
-    if (opponent) {
-      if (!this.isHost && this.localPlayer) {
-        // If guest sees host, re-announce join in case host missed it
-        this.broadcastEvent('PLAYER_JOIN', this.localPlayer);
+      if (Array.isArray(presences)) {
+        allPresences.push(...presences);
       }
+    });
+    this.processPresences(allPresences);
+  }
+
+  private processPresences(presences: any[]) {
+    if (!presences || !this.localPlayer) return;
+    const opp = presences.find((p) => p.playerId && p.playerId !== this.localPlayer?.id);
+    if (opp) {
+      const oppInfo: RemotePlayerInfo = {
+        id: opp.playerId,
+        name: opp.name || 'Opponent',
+        creatureType: opp.creatureType || CreatureType.Mammal,
+        size: opp.size || 'Medium',
+        deckCards: Array.isArray(opp.deckCards) ? opp.deckCards : [],
+      };
+      this.handleOpponentFound(oppInfo);
     }
   }
 
-  private handlePlayerJoin(remotePlayer: RemotePlayerInfo) {
+  private handleOpponentFound(remotePlayer: RemotePlayerInfo) {
     if (!remotePlayer || remotePlayer.id === this.localPlayer?.id) return;
     this.opponentPlayer = remotePlayer;
+    this.stopAnnounceLoop();
     this.callbacks?.onOpponentJoined(remotePlayer);
 
     if (this.isHost) {
       this.callbacks?.onStatusChange('ready', `${remotePlayer.name} has joined! Ready to battle.`);
+    } else {
+      this.callbacks?.onStatusChange('ready', `Connected to Host ${remotePlayer.name}! Waiting for battle to start.`);
+    }
+  }
+
+  private handleOpponentLeft() {
+    this.opponentPlayer = null;
+    this.callbacks?.onOpponentLeft();
+    if (this.isHost && !this.gameStarted) {
+      this.callbacks?.onStatusChange('waiting_for_opponent', 'Opponent disconnected. Waiting for challenger...');
+      this.startAnnounceLoop();
     }
   }
 
@@ -213,14 +292,29 @@ export class MultiplayerManager {
       notifications: []
     };
 
-    // Broadcast to guest and invoke locally
+    this.gameStarted = true;
+    this.stopAnnounceLoop();
+
+    // Broadcast to guest
     this.broadcastEvent('START_GAME', { initialState });
+
+    // Retry once after 600ms if guest hasn't acknowledged
+    this.startGameTimeout = setTimeout(() => {
+      this.broadcastEvent('START_GAME', { initialState });
+    }, 600);
+
     this.callbacks?.onStatusChange('in_game');
     this.callbacks?.onGameStarted(initialState);
   }
 
   private handleStartGame(payload: { initialState: GameState }) {
-    if (!payload?.initialState) return;
+    if (!payload?.initialState || this.gameStarted) return;
+    this.gameStarted = true;
+    this.stopAnnounceLoop();
+
+    // Send ACK back to host
+    this.broadcastEvent('START_GAME_ACK', {});
+
     this.callbacks?.onStatusChange('in_game');
     this.callbacks?.onGameStarted(payload.initialState);
   }
@@ -230,33 +324,15 @@ export class MultiplayerManager {
     this.broadcastEvent('GAME_ACTION', { action });
   }
 
-  private handleGameAction(payload: { action: GameAction }) {
-    if (payload?.action) {
-      this.callbacks?.onRemoteAction(payload.action);
-    }
-  }
-
-  // Sync state fallback
+  // State reconciliation
   public sendStateSync(state: GameState): void {
     this.broadcastEvent('SYNC_STATE', { state });
   }
 
-  private handleSyncState(payload: { state: GameState }) {
-    if (payload?.state) {
-      this.callbacks?.onStateSync(payload.state);
-    }
-  }
-
-  // Send reaction emote
+  // Send emote
   public sendEmote(emote: string): void {
     if (!this.localPlayer) return;
     this.broadcastEvent('EMOTE', { emote, senderName: this.localPlayer.name });
-  }
-
-  private handleEmote(payload: { emote: string; senderName: string }) {
-    if (payload?.emote) {
-      this.callbacks?.onEmoteReceived(payload.emote, payload.senderName || 'Opponent');
-    }
   }
 
   // Rematch request
@@ -279,12 +355,23 @@ export class MultiplayerManager {
   }
 
   public leaveRoom(): void {
+    this.stopAnnounceLoop();
+    if (this.startGameTimeout) {
+      clearTimeout(this.startGameTimeout);
+      this.startGameTimeout = null;
+    }
     if (this.channel) {
-      this.channel.unsubscribe();
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        supabase.removeChannel(this.channel);
+      } else {
+        this.channel.unsubscribe();
+      }
       this.channel = null;
     }
     this.roomCode = '';
     this.opponentPlayer = null;
+    this.gameStarted = false;
     this.callbacks?.onStatusChange('idle');
   }
 

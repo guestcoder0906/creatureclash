@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { CardId, CreatureType, GameState } from '../types';
 import { CARDS, getRandomElement } from '../constants';
 import { generateRandomAiDeck } from '../services/gameEngine';
+import { getStoredSupabaseConfig, saveSupabaseConfig, getSupabaseClient } from '../services/supabase';
 import { multiplayerService, RemotePlayerInfo, ConnectionStatus } from '../services/multiplayer';
 
 interface MultiplayerLobbyProps {
@@ -40,16 +41,23 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
   const [activeTab, setActiveTab] = useState<'create' | 'join'>('create');
   const [roomCodeInput, setRoomCodeInput] = useState('');
   const [createdRoomCode] = useState(generateRandomRoomCode());
+  const [inRoom, setInRoom] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('idle');
   const [statusMessage, setStatusMessage] = useState<string>('');
+  const [errorMessage, setErrorMessage] = useState<string>('');
   const [opponent, setOpponent] = useState<RemotePlayerInfo | null>(null);
   const [copySuccess, setCopySuccess] = useState(false);
+
+  // Fallback dev input toggle if env vars are missing in local preview
+  const [showDevConfig, setShowDevConfig] = useState(false);
+  const [devUrl, setDevUrl] = useState('');
+  const [devKey, setDevKey] = useState('');
 
   // Deck mode: 'custom' or 'random'
   const hasCustomDeck = customDeck && customDeck.length >= 10;
   const [deckMode, setDeckMode] = useState<'custom' | 'random'>(hasCustomDeck ? 'custom' : 'random');
 
-  // Random setup generated on demand or mount
+  // Random setup generated on demand
   const [randomSetup, setRandomSetup] = useState(() => {
     const types = [CreatureType.Mammal, CreatureType.Reptile, CreatureType.Avian, CreatureType.Amphibian];
     const sizes: ('Small' | 'Medium' | 'Big')[] = ['Small', 'Medium', 'Big'];
@@ -74,7 +82,6 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
     });
   };
 
-  // Resolve current active setup for this player
   const activeCreatureType = deckMode === 'custom' && hasCustomDeck ? creatureType : randomSetup.type;
   const activeSize = deckMode === 'custom' && hasCustomDeck ? size : randomSetup.size;
   const activeDeck = deckMode === 'custom' && hasCustomDeck ? customDeck : randomSetup.deck;
@@ -87,6 +94,10 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
       setRoomCodeInput(roomParam.trim().toUpperCase());
       setActiveTab('join');
     }
+
+    const cfg = getStoredSupabaseConfig();
+    if (cfg.url) setDevUrl(cfg.url);
+    if (cfg.anonKey) setDevKey(cfg.anonKey);
   }, []);
 
   // Cleanup multiplayer on unmount if not in game
@@ -98,7 +109,24 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
     };
   }, [connectionStatus]);
 
+  const handleSaveDevConfig = () => {
+    if (!devUrl.trim() || !devKey.trim()) return;
+    saveSupabaseConfig(devUrl.trim(), devKey.trim());
+    setErrorMessage('');
+    setShowDevConfig(false);
+  };
+
   const handleCreateRoom = () => {
+    setErrorMessage('');
+    const client = getSupabaseClient();
+    if (!client) {
+      setErrorMessage(
+        'Supabase credentials not found. Make sure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are configured in your Vercel project settings or set them below.'
+      );
+      setShowDevConfig(true);
+      return;
+    }
+
     const myId = `host_${Date.now().toString(36)}`;
     const localPlayer: RemotePlayerInfo = {
       id: myId,
@@ -108,17 +136,24 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
       deckCards: activeDeck,
     };
 
-    multiplayerService.init(createdRoomCode, true, localPlayer, {
+    setInRoom(true);
+    setConnectionStatus('connecting');
+    setStatusMessage('Connecting to Supabase Realtime Live...');
+
+    const success = multiplayerService.init(createdRoomCode, true, localPlayer, {
       onStatusChange: (status, msg) => {
         setConnectionStatus(status);
         if (msg) setStatusMessage(msg);
+        if (status === 'error' && msg) {
+          setErrorMessage(msg);
+        }
       },
       onOpponentJoined: (opp) => {
         setOpponent(opp);
       },
       onOpponentLeft: () => {
         setOpponent(null);
-        setStatusMessage('Opponent has disconnected.');
+        setStatusMessage('Opponent has left. Waiting for challenger...');
       },
       onGameStarted: (initialState) => {
         onStartGame(initialState, myId, true);
@@ -128,11 +163,26 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
       onEmoteReceived: () => {},
       onRematchRequested: () => {},
     });
+
+    if (!success) {
+      setInRoom(false);
+    }
   };
 
   const handleJoinRoom = () => {
-    if (!roomCodeInput.trim()) {
-      setStatusMessage('Please enter a room code.');
+    setErrorMessage('');
+    const trimmedCode = roomCodeInput.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (!trimmedCode) {
+      setErrorMessage('Please enter a valid room code.');
+      return;
+    }
+
+    const client = getSupabaseClient();
+    if (!client) {
+      setErrorMessage(
+        'Supabase credentials not found. Make sure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are configured in your Vercel project settings or set them below.'
+      );
+      setShowDevConfig(true);
       return;
     }
 
@@ -145,10 +195,17 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
       deckCards: activeDeck,
     };
 
-    multiplayerService.init(roomCodeInput.trim(), false, localPlayer, {
+    setInRoom(true);
+    setConnectionStatus('connecting');
+    setStatusMessage(`Connecting to room ${trimmedCode}...`);
+
+    const success = multiplayerService.init(trimmedCode, false, localPlayer, {
       onStatusChange: (status, msg) => {
         setConnectionStatus(status);
         if (msg) setStatusMessage(msg);
+        if (status === 'error' && msg) {
+          setErrorMessage(msg);
+        }
       },
       onOpponentJoined: (opp) => {
         setOpponent(opp);
@@ -165,6 +222,10 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
       onEmoteReceived: () => {},
       onRematchRequested: () => {},
     });
+
+    if (!success) {
+      setInRoom(false);
+    }
   };
 
   const handleStartHostBattle = () => {
@@ -173,7 +234,7 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
   };
 
   const handleCopyInviteLink = () => {
-    const code = activeTab === 'create' ? createdRoomCode : roomCodeInput;
+    const code = activeTab === 'create' ? createdRoomCode : roomCodeInput.trim().toUpperCase();
     const url = `${window.location.origin}${window.location.pathname}?room=${code}`;
     navigator.clipboard.writeText(url).then(() => {
       setCopySuccess(true);
@@ -181,35 +242,93 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
     });
   };
 
-  const handleCancel = () => {
+  const handleLeaveRoom = () => {
     multiplayerService.leaveRoom();
+    setInRoom(false);
     setConnectionStatus('idle');
     setOpponent(null);
     setStatusMessage('');
+    setErrorMessage('');
   };
-
-  const isConnectedToRoom = connectionStatus === 'waiting_for_opponent' || connectionStatus === 'ready' || connectionStatus === 'connecting';
 
   return (
     <div className="min-h-screen bg-stone-950 flex flex-col items-center justify-center p-4 text-white relative">
       <div className="max-w-xl w-full bg-stone-900 border border-stone-800 rounded-3xl shadow-2xl p-6 md:p-8 animate-fade-in relative z-10">
         
         {/* Header */}
-        <div className="flex items-center justify-between mb-6 border-b border-stone-800 pb-4">
+        <div className="flex items-center justify-between mb-5 border-b border-stone-800 pb-4">
           <div className="flex items-center gap-3">
             <span className="text-3xl">🌐</span>
             <div>
               <h1 className="text-2xl font-black text-amber-500 uppercase tracking-wider">Online Multiplayer</h1>
-              <p className="text-xs text-stone-400">Live PvP creature battle • Vercel Ready</p>
+              <p className="text-xs text-stone-400">Powered by Supabase Realtime Live • Vercel Ready</p>
             </div>
           </div>
           <button
-            onClick={onBack}
+            onClick={inRoom ? handleLeaveRoom : onBack}
             className="text-stone-400 hover:text-white text-xs font-bold px-3 py-1.5 bg-stone-800 rounded-lg border border-stone-700 transition cursor-pointer"
           >
-            ← Menu
+            {inRoom ? 'Leave Room' : '← Menu'}
           </button>
         </div>
+
+        {/* Global Error Banner if any */}
+        {errorMessage && (
+          <div className="mb-4 p-3.5 bg-red-950/60 border border-red-500/50 rounded-xl text-red-200 text-xs flex flex-col gap-2 animate-fade-in">
+            <div className="flex items-start gap-2">
+              <span className="text-base">⚠️</span>
+              <span className="flex-1 font-medium">{errorMessage}</span>
+            </div>
+            {!showDevConfig && (
+              <button
+                onClick={() => setShowDevConfig(true)}
+                className="self-start text-[11px] text-amber-400 hover:underline font-bold"
+              >
+                Set / Check Supabase Credentials →
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Optional Dev / Preview Credentials form if needed */}
+        {showDevConfig && (
+          <div className="mb-5 p-4 bg-stone-950 border border-stone-700 rounded-2xl space-y-3 animate-fade-in">
+            <div className="flex justify-between items-center">
+              <span className="text-xs font-bold text-amber-400 uppercase tracking-wider">
+                Supabase Credentials (Vercel / Local)
+              </span>
+              <button
+                onClick={() => setShowDevConfig(false)}
+                className="text-stone-400 hover:text-white text-xs"
+              >
+                ✕ Close
+              </button>
+            </div>
+            <p className="text-[11px] text-stone-400 leading-relaxed">
+              If deploying on Vercel, set these in <span className="text-white font-mono">Project Settings → Environment Variables</span>. For local preview, enter them here:
+            </p>
+            <input
+              type="text"
+              placeholder="https://xyz.supabase.co"
+              value={devUrl}
+              onChange={(e) => setDevUrl(e.target.value)}
+              className="w-full px-3 py-2 bg-black/60 rounded-lg border border-stone-700 text-xs font-mono text-white outline-none focus:border-amber-500"
+            />
+            <input
+              type="text"
+              placeholder="anon-public-key"
+              value={devKey}
+              onChange={(e) => setDevKey(e.target.value)}
+              className="w-full px-3 py-2 bg-black/60 rounded-lg border border-stone-700 text-xs font-mono text-white outline-none focus:border-amber-500"
+            />
+            <button
+              onClick={handleSaveDevConfig}
+              className="w-full py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs rounded-lg transition"
+            >
+              Save Credentials
+            </button>
+          </div>
+        )}
 
         {/* Deck Selection & Chosen Creature Display Bar */}
         <div className="mb-6 p-4 bg-stone-950/80 border border-stone-800 rounded-2xl space-y-3">
@@ -232,7 +351,8 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
               {hasCustomDeck && (
                 <button
                   onClick={() => setDeckMode('custom')}
-                  className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer ${
+                  disabled={inRoom}
+                  className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer disabled:opacity-50 ${
                     deckMode === 'custom'
                       ? 'bg-amber-600 text-white shadow-md'
                       : 'bg-stone-800 text-stone-400 hover:text-stone-200'
@@ -243,7 +363,8 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
               )}
               <button
                 onClick={() => setDeckMode('random')}
-                className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer ${
+                disabled={inRoom}
+                className={`px-3 py-1.5 rounded-lg font-bold transition cursor-pointer disabled:opacity-50 ${
                   deckMode === 'random'
                     ? 'bg-amber-600 text-white shadow-md'
                     : 'bg-stone-800 text-stone-400 hover:text-stone-200'
@@ -254,7 +375,7 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
             </div>
 
             <div className="flex items-center gap-2 ml-auto">
-              {deckMode === 'random' && (
+              {deckMode === 'random' && !inRoom && (
                 <button
                   onClick={rollNewRandomDeck}
                   className="text-stone-400 hover:text-amber-400 font-bold underline cursor-pointer text-[11px]"
@@ -263,18 +384,20 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
                   🔄 Re-roll Creature
                 </button>
               )}
-              <button
-                onClick={onOpenDeckBuilder}
-                className="text-amber-400 hover:text-amber-300 font-bold underline cursor-pointer text-[11px]"
-              >
-                Deck Builder
-              </button>
+              {!inRoom && (
+                <button
+                  onClick={onOpenDeckBuilder}
+                  className="text-amber-400 hover:text-amber-300 font-bold underline cursor-pointer text-[11px]"
+                >
+                  Deck Builder
+                </button>
+              )}
             </div>
           </div>
         </div>
 
         {/* Main Content Area */}
-        {!isConnectedToRoom ? (
+        {!inRoom ? (
           <div>
             {/* Mode Switcher Tabs */}
             <div className="grid grid-cols-2 gap-2 mb-6 p-1 bg-stone-950 rounded-xl border border-stone-800">
@@ -311,7 +434,7 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
                     {createdRoomCode}
                   </div>
                   <p className="text-[11px] text-stone-500 mt-2">
-                    Playing as <span className="font-bold text-amber-300">{CREATURE_ICONS[activeCreatureType]} ({activeSize})</span> with a {activeDeck.length}-card deck
+                    Playing as <span className="font-bold text-amber-300">{CREATURE_ICONS[activeCreatureType]} ({activeSize})</span> with {activeDeck.length} cards
                   </p>
                 </div>
 
@@ -358,11 +481,18 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
           /* Waiting / Room Lobby State */
           <div className="space-y-6">
             <div className="p-4 bg-stone-950/80 rounded-2xl border border-stone-800 text-center">
-              <div className="text-xs uppercase font-bold text-stone-400 tracking-wider mb-1">
-                Active Room
+              <div className="text-xs uppercase font-bold text-stone-400 tracking-wider mb-1 flex items-center justify-center gap-2">
+                <span className={`w-2 h-2 rounded-full ${
+                  connectionStatus === 'ready' 
+                    ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]' 
+                    : connectionStatus === 'connecting'
+                    ? 'bg-amber-400 animate-pulse'
+                    : 'bg-emerald-400 animate-pulse'
+                }`} />
+                <span>Room Code</span>
               </div>
               <div className="text-4xl font-black text-amber-400 tracking-widest font-mono select-all">
-                {activeTab === 'create' ? createdRoomCode : roomCodeInput}
+                {activeTab === 'create' ? createdRoomCode : roomCodeInput.trim().toUpperCase()}
               </div>
 
               <div className="mt-3 flex items-center justify-center gap-2">
@@ -380,7 +510,7 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
               {/* Local Player */}
               <div className="p-4 bg-stone-950/70 border-2 border-amber-500/40 rounded-2xl text-center shadow-lg">
                 <span className="text-2xl block mb-1">👑</span>
-                <div className="text-xs text-amber-400 font-black uppercase tracking-wider">
+                <div className="text-xs text-amber-400 font-black uppercase tracking-wider truncate">
                   {playerName || 'You'} {activeTab === 'create' ? '(HOST)' : ''}
                 </div>
                 <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-stone-850 rounded-full border border-stone-700 text-xs font-bold text-amber-300 my-2">
@@ -402,8 +532,8 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
                   : 'bg-stone-950/30 border-dashed border-stone-800 text-stone-500'
               }`}>
                 <span className="text-2xl block mb-1">{opponent ? '⚔️' : '⏳'}</span>
-                <div className="text-xs font-black uppercase tracking-wider">
-                  {opponent ? opponent.name : 'Waiting for Challenger...'}
+                <div className="text-xs font-black uppercase tracking-wider truncate">
+                  {opponent ? opponent.name : 'Waiting...'}
                 </div>
                 {opponent ? (
                   <>
@@ -428,8 +558,9 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
 
             {/* Status Message */}
             {statusMessage && (
-              <div className="text-center text-xs text-stone-300 bg-stone-900/60 p-2.5 rounded-lg border border-stone-800">
-                {statusMessage}
+              <div className="text-center text-xs text-stone-300 bg-stone-900/80 p-2.5 rounded-lg border border-stone-800 flex items-center justify-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
+                <span>{statusMessage}</span>
               </div>
             )}
 
@@ -444,13 +575,15 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
                   <span>⚔️</span> START BATTLE
                 </button>
               ) : (
-                <div className="text-center p-3 text-xs text-stone-400 italic">
-                  Waiting for host to launch the match...
+                <div className="text-center p-3 text-xs text-stone-400 italic bg-black/30 rounded-xl border border-white/5">
+                  {opponent 
+                    ? `Connected to Host (${opponent.name}). Waiting for Host to start battle...` 
+                    : 'Connecting to room channel via Supabase Realtime...'}
                 </div>
               )}
 
               <button
-                onClick={handleCancel}
+                onClick={handleLeaveRoom}
                 className="w-full py-2.5 bg-stone-800 hover:bg-stone-700 text-stone-300 font-bold text-xs rounded-xl border border-stone-700 transition cursor-pointer"
               >
                 Leave Room
@@ -459,15 +592,15 @@ export const MultiplayerLobby: React.FC<MultiplayerLobbyProps> = ({
           </div>
         )}
 
-        {/* Back to Single Player */}
+        {/* Footer */}
         <div className="mt-6 pt-4 border-t border-stone-800 flex justify-between items-center text-xs text-stone-500">
           <button
-            onClick={onBack}
+            onClick={inRoom ? handleLeaveRoom : onBack}
             className="hover:text-stone-300 font-bold transition cursor-pointer"
           >
             ← Back to Main Menu
           </button>
-          <span>Real-time WebSocket PvP</span>
+          <span>Supabase Realtime Live</span>
         </div>
       </div>
     </div>
