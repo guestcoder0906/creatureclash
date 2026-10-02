@@ -299,7 +299,9 @@ export const Game: React.FC<GameProps> = ({ state, playerId, dispatch, onExit })
 
   const isHibernate = selectedDef?.id === CardId.Hibernate;
   const isHealingHibernate = isHibernate && me.hp < me.maxHp;
-  const effectiveAbilityStaminaCost = isHealingHibernate ? 0 : (selectedDef?.staminaCost ?? 0);
+  const effectiveAbilityStaminaCost = isHibernate 
+    ? (isHealingHibernate ? 2 : 1)
+    : (selectedDef?.staminaCost ?? 0);
   const hasEnoughAbilityStamina = me.stamina >= effectiveAbilityStaminaCost;
 
   const isFreeAction = selectedDef?.id === CardId.ShortBurst || selectedDef?.id === CardId.AdrenalineRush || selectedDef?.id === CardId.EnhancedSmell || selectedDef?.id === CardId.Focus || selectedDef?.id === CardId.Rage || (selectedDef?.id === CardId.Agile && selectedDef?.type === CardType.Ability);
@@ -853,8 +855,10 @@ export const Game: React.FC<GameProps> = ({ state, playerId, dispatch, onExit })
                    ? 'USED (1/Turn)' 
                    : isAbilityCard && isAbilityBlocked 
                    ? 'ABILITY USED' 
-                   : isHealingHibernate 
-                   ? 'HIBERNATE (+1 ST)' 
+                   : isHibernate && isHealingHibernate 
+                   ? 'HEAL 2 HP (2 ⚡)' 
+                   : isHibernate && !isHealingHibernate 
+                   ? '+2 STAMINA (1 ⚡)' 
                    : isHandInstantAbility
                    ? 'USE (+1 ST)'
                    : 'ABILITY'}

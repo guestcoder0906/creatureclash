@@ -582,13 +582,12 @@ export const gameReducer = (state: GS, action: GA): GS => {
                 if (wasDamaged) {
                     const healAmount = Math.min(2, p.maxHp - p.hp);
                     p.hp = Math.min(p.maxHp, p.hp + 2);
-                    p.stamina += 1;
-                    log(`${p.name} hibernated: healed ${healAmount} HP and gained +1 Stamina.`);
-                    notify("Hibernated: +2 HP & +1 Stamina!", 'success');
+                    log(`${p.name} hibernated: healed ${healAmount} HP (cost 2 Stamina).`);
+                    notify(`Hibernated: healed ${healAmount} HP!`, 'success');
                 } else {
-                    p.stamina += 1;
-                    log(`${p.name} hibernated at full HP (+1 Stamina).`);
-                    notify("Hibernated at full HP (+1 Stamina)", 'info');
+                    p.stamina += 2;
+                    log(`${p.name} hibernated at full HP: used 1 Stamina to gain +2 Stamina.`);
+                    notify("Hibernated at full HP: +2 Stamina gained!", 'success');
                 }
             }
             if (def.id === CID.Regeneration) {
@@ -1202,14 +1201,22 @@ export const gameReducer = (state: GS, action: GA): GS => {
             }
         }
 
-        // Hibernate rule: gains +1 stamina and not get 2 stamina removed (only if healing)
+        // Hibernate rule:
+        // When damaged (p.hp < p.maxHp): costs 2 Stamina to heal 2 HP.
+        // When already full health (p.hp >= p.maxHp): costs 1 Stamina to gain +2 Stamina.
         const isHibernate = def.id === CID.Hibernate;
         const isHealingHibernate = isHibernate && p.hp < p.maxHp;
-        const effectiveStaminaCost = isHealingHibernate ? 0 : def.staminaCost;
+        const effectiveStaminaCost = isHibernate 
+            ? (isHealingHibernate ? 2 : 1)
+            : def.staminaCost;
 
         if (p.stamina < effectiveStaminaCost) {
-            if (isHibernate && !isHealingHibernate) {
-                notify("Need 2 Stamina when already at full HP!", 'error');
+            if (isHibernate) {
+                if (isHealingHibernate) {
+                    notify("Need 2 Stamina to Hibernate and heal 2 HP!", 'error');
+                } else {
+                    notify("Need 1 Stamina to Hibernate for +2 Stamina!", 'error');
+                }
             } else {
                 notify(`Need ${effectiveStaminaCost} Stamina!`, 'error');
             }

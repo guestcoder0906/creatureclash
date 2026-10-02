@@ -221,7 +221,7 @@ export const CARDS: Record<string, CardDef> = {
   [CardId.Hibernate]: {
     id: CardId.Hibernate, name: "Hibernate", type: CardType.Ability, abilityStatus: AbilityStatus.None,
     creatureTypes: [CreatureType.Mammal, CreatureType.Reptile, CreatureType.Amphibian], habitats: 'All', staminaCost: 2,
-    description: "If damaged: Heal 2 HP & gain +1 Stamina (costs 0 Stamina). If full HP: Costs 2 Stamina to gain +1 Stamina."
+    description: "If damaged: Costs 2 Stamina to heal 2 HP. If already full HP: Costs 1 Stamina to gain +2 Stamina."
   },
   [CardId.Flight]: {
     id: CardId.Flight, name: "Flight", type: CardType.Ability, abilityStatus: AbilityStatus.None,

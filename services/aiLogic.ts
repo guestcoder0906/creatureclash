@@ -346,8 +346,9 @@ export const computeNextAiAction = (state: GameState, aiId: string): GameAction 
             if (!isFreeAction && ai.hasUsedAbilityThisTurn) return false;
         }
 
-        const isHealingHibernate = def.id === CardId.Hibernate && ai.hp < ai.maxHp;
-        const effectiveCost = isHealingHibernate ? 0 : def.staminaCost;
+        const isHibernate = def.id === CardId.Hibernate;
+        const isHealingHibernate = isHibernate && ai.hp < ai.maxHp;
+        const effectiveCost = isHibernate ? (isHealingHibernate ? 2 : 1) : def.staminaCost;
         if (effectiveCost > currentStamina) return false;
 
         return true;
@@ -395,13 +396,20 @@ export const computeNextAiAction = (state: GameState, aiId: string): GameAction 
 
             // --- ABILITY SCORING ---
             if (isAbility) {
-                // Hibernate: Free heal + stamina when damaged
+                // Hibernate:
+                // If damaged: Costs 2 Stamina to heal 2 HP.
+                // If full HP: Costs 1 Stamina to gain +2 Stamina.
                 if (def.id === CardId.Hibernate) {
                     if (ai.hp < ai.maxHp) {
                         const missingHp = ai.maxHp - ai.hp;
-                        score += 35 + missingHp * 5;
+                        if (currentStamina >= 2) {
+                            score += 30 + missingHp * 5;
+                        }
                     } else {
-                        score -= 20;
+                        // At full health: using 1 stamina to gain +2 stamina is great if stamina <= 4
+                        if (currentStamina >= 1 && currentStamina <= 4) {
+                            score += 26;
+                        }
                     }
                 }
 
