@@ -47,7 +47,7 @@ const App: React.FC = () => {
         aiTurnTimeoutRef.current = setTimeout(() => {
             const reaction = computeReaction(gameState, aiId);
             if (reaction) dispatch(reaction);
-        }, 1000); // Delay reaction for UI effect
+        }, 1600); // Cooldown for AI reaction
         return;
     }
 
@@ -64,12 +64,12 @@ const App: React.FC = () => {
              dispatch(actions[i]);
              i++;
              if (i < actions.length) {
-                aiTurnTimeoutRef.current = setTimeout(executeNext, 1800);
+                aiTurnTimeoutRef.current = setTimeout(executeNext, 2800); // 2.8s cooldown between AI actions
              }
           }
         };
         executeNext();
-      }, 1000);
+      }, 1800); // 1.8s initial thinking pause at turn start
     }
 
     return () => {

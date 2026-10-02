@@ -797,61 +797,59 @@ export const gameReducer = (state: GS, action: GA): GS => {
         log(`${nextPlayer.name} regenerates 1 HP (Amphibious).`);
       }
 
-      if (nextPlayer.deck.length === 0 && nextPlayer.discard.length > 0) {
-        nextPlayer.deck = [...nextPlayer.discard];
-        nextPlayer.discard = [];
-        for (let i = nextPlayer.deck.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [nextPlayer.deck[i], nextPlayer.deck[j]] = [nextPlayer.deck[j], nextPlayer.deck[i]];
+      if (nextPlayer.deck.length === 0) {
+        if (nextPlayer.discard.length > 0) {
+          nextPlayer.deck = [...nextPlayer.discard];
+          nextPlayer.discard = [];
+          for (let i = nextPlayer.deck.length - 1; i > 0; i--) {
+              const j = Math.floor(Math.random() * (i + 1));
+              [nextPlayer.deck[i], nextPlayer.deck[j]] = [nextPlayer.deck[j], nextPlayer.deck[i]];
+          }
+          log(`${nextPlayer.name} reshuffled their discard pile into their deck.`);
+        } else {
+          // If discard is also empty, re-seed deck so player can always draw cards
+          const sourceCardIds = nextPlayer.customDeckCardIds || (Object.keys(CARDS) as CID[]);
+          const availablePool = sourceCardIds.filter(id => {
+              const def = CARDS[id];
+              return def && def.type !== CType.Size && isCardCompatible(nextPlayer, def);
+          });
+          const pool = availablePool.length > 0 ? availablePool : [CID.Bite, CID.Claw, CID.Strike, CID.Evolve];
+          for (let i = 0; i < 6; i++) {
+              const defId = pool[Math.floor(Math.random() * pool.length)];
+              nextPlayer.deck.push({
+                  instanceId: `${nextPlayer.id}_reseed_${Date.now()}_${i}`,
+                  defId,
+                  charges: CARDS[defId]?.maxCharges
+              });
+          }
+          log(`${nextPlayer.name}'s deck replenished with new cards.`);
         }
-        log(`${nextPlayer.name} reshuffled their discard pile into their deck.`);
       }
 
       if (nextPlayer.deck.length > 0) {
-        // Strict Unique Draw Logic: Filter deck for cards NOT in hand AND NOT in formation
-        let uniqueCardIndex = nextPlayer.deck.findIndex(c => 
+        // Preferred draw: card not in hand and not in formation
+        let cardIndex = nextPlayer.deck.findIndex(c => 
             !nextPlayer.hand.some(h => h.defId === c.defId) && 
             !nextPlayer.formation.some(f => f.defId === c.defId)
         );
 
-        if (uniqueCardIndex === -1 && nextPlayer.deck.length > 0) {
-            uniqueCardIndex = 0;
+        if (cardIndex === -1) {
+            // Next preference: card not currently in hand
+            cardIndex = nextPlayer.deck.findIndex(c => !nextPlayer.hand.some(h => h.defId === c.defId));
         }
 
-        if (uniqueCardIndex !== -1) {
-            const drawn = nextPlayer.deck.splice(uniqueCardIndex, 1)[0];
-            const def = CARDS[drawn.defId];
-            const isCompatible = isCardCompatible(nextPlayer, def);
-            
-            if (!isCompatible) {
-               nextPlayer.hand.push(drawn);
-               log(`${nextPlayer.name} drew ${def.name} (Added to Hand - Type Mismatch).`);
-            } else {
-              const isPassiveTrait = def.type === CType.Physical && def.staminaCost === 0 && !def.isUpgrade && def.id !== CID.Camouflage && def.id !== CID.CamouflageWater && def.id !== CID.Agile; 
-              
-              if ((isPassiveTrait && def.id !== CID.Camouflage && def.id !== CID.CamouflageWater) || def.type === CType.Size) {
-                   const physicalCount = nextPlayer.formation.filter(c => CARDS[c.defId].type === CType.Physical).length;
-                   const abilityCount = nextPlayer.formation.filter(c => CARDS[c.defId].type === CType.Ability).length;
+        if (cardIndex === -1 && nextPlayer.deck.length > 0) {
+            cardIndex = 0;
+        }
 
-                   if (def.type === CType.Physical && physicalCount >= 5) {
-                       log(`${nextPlayer.name} drew ${def.name} but formation full (Added to Hand).`);
-                       nextPlayer.hand.push(drawn);
-                   } else if (def.type === CType.Ability && abilityCount >= 5) {
-                       log(`${nextPlayer.name} drew ${def.name} but formation full (Added to Hand).`);
-                       nextPlayer.hand.push(drawn);
-                   } else {
-                       nextPlayer.formation.push(drawn);
-                       if (def.id === CID.StrongBuild) { nextPlayer.hp += 2; nextPlayer.maxHp += 2; }
-                       log(`${nextPlayer.name} drew & played ${def.name} (Passive).`);
-                       notify(`${def.name} auto-played`, 'info');
-                   }
-              } else {
-                nextPlayer.hand.push(drawn);
-                log(`${nextPlayer.name} drew a card.`);
-              }
-            }
-        } else {
-            log(`${nextPlayer.name} has no unique cards to draw.`);
+        if (cardIndex !== -1) {
+            const drawn = nextPlayer.deck.splice(cardIndex, 1)[0];
+            const def = CARDS[drawn.defId];
+            
+            // ALWAYS put drawn card into player hand!
+            nextPlayer.hand.push(drawn);
+            log(`${nextPlayer.name} drew ${def.name}.`);
+            notify(`${nextPlayer.name === 'You' || nextPlayer.id === 'local-player' ? 'You' : nextPlayer.name} drew ${def.name}`, 'info');
         }
       }
 
