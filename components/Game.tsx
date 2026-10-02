@@ -15,7 +15,7 @@ const ACTIVE_PHYSICALS = [
   CardId.BigClaws, CardId.StrongTail, CardId.DeathRoll, 
   CardId.GraspingTalons, CardId.DiveBomb, CardId.PiercingBeak, 
   CardId.VenomousFangs, CardId.CrushingWeight, CardId.Leech,
-  CardId.Camouflage, CardId.AmbushAttack, CardId.SwimFast
+  CardId.Camouflage, CardId.SwimFast
 ];
 
 const ACTIVE_ABILITIES = [
@@ -24,7 +24,7 @@ const ACTIVE_ABILITIES = [
   CardId.Rage, CardId.TerritorialDisplay, CardId.ExhaustingRoar, CardId.EnhancedSmell, 
   CardId.Copycat, CardId.Agile, CardId.Freeze, CardId.ApexEvolution,
   CardId.ShortBurst, CardId.Dig, CardId.Roar, CardId.Flight, CardId.Mimicry,
-  CardId.StandOnHindLegs
+  CardId.StandOnHindLegs, CardId.AmbushAttack
 ];
 
 const NotificationToast: React.FC<{ note: GameNotification, onDismiss: () => void }> = ({ note, onDismiss }) => {
@@ -835,7 +835,7 @@ export const Game: React.FC<GameProps> = ({ state, playerId, dispatch, onExit })
                  onClick={() => handleAction('ATTACK')}
                  className={`rounded-lg py-2 md:py-3 font-black text-[10px] md:text-sm transition-all active:scale-95 disabled:opacity-30 disabled:scale-100 ${isSelectedInFormation && selectedDef?.type === CardType.Physical && !isAttackBlocked && hasEnoughAttackStamina ? 'bg-red-600 text-white hover:bg-red-500 shadow-[0_0_15px_rgba(220,38,38,0.4)]' : 'bg-stone-800 text-stone-500'}`}
                >
-                 {isSelectedInFormation && selectedDef?.type === CardType.Physical && isAttackBlocked ? 'ATTACK USED' : (selectedDef?.id === CardId.Camouflage || selectedDef?.id === CardId.AmbushAttack || selectedDef?.id === CardId.SwimFast) ? 'ACTION' : 'ATTACK'}
+                 {isSelectedInFormation && selectedDef?.type === CardType.Physical && isAttackBlocked ? 'ATTACK USED' : (selectedDef?.id === CardId.Camouflage || selectedDef?.id === CardId.SwimFast) ? 'ACTION' : 'ATTACK'}
                </button>
 
                <button 

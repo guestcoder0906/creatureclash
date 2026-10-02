@@ -1,325 +1,515 @@
-import { GameState, GameAction, CardType, CardId, AbilityStatus, CardInstance, PendingReaction } from '../types';
+import { GameState, GameAction, CardType, CardId, CardInstance, Habitat } from '../types';
 import { CARDS } from '../constants';
 
+// Helper to calculate estimated damage of an attack
+const getEstimatedAttackDamage = (attackerCardId: CardId | string, attackerStatuses: { type: string }[]): number => {
+    let dmg = 2;
+    if (attackerCardId === CardId.DiveBomb || attackerCardId === CardId.CrushingWeight) dmg = 4;
+    else if (attackerCardId === CardId.Bite || attackerCardId === CardId.BigClaws) dmg = 3;
+    else if (attackerCardId === CardId.GraspingTalons || attackerCardId === CardId.VenomousFangs || attackerCardId === CardId.Leech) dmg = 1;
+
+    if (attackerStatuses.some(s => s.type === 'DamageBuff')) {
+        dmg += 1;
+    }
+    return dmg;
+};
+
+// Compute reactive decisions (Agile evasion & Big Claws choice)
 export const computeReaction = (state: GameState, aiId: string): GameAction | null => {
-   const ai = state.players[aiId];
+    const ai = state.players[aiId];
+    if (!ai) return null;
 
-   // Handle Agile Reaction
-   if (state.pendingReaction && state.pendingReaction.targetId === aiId) {
-       const reaction = state.pendingReaction;
-       if (ai.stamina < 1) return { type: 'RESOLVE_AGILE', playerId: aiId, useAgile: false, rng: [] };
+    // 1. Handle Agile Reaction
+    if (state.pendingReaction && state.pendingReaction.targetId === aiId) {
+        const reaction = state.pendingReaction;
+        if (ai.stamina < 1) {
+            return { type: 'RESOLVE_AGILE', playerId: aiId, useAgile: false, rng: [] };
+        }
 
-       // Heuristic: When to evade?
-       let shouldEvade = false;
-       
-       // 1. Avoid Lethal
-       let estimatedDmg = 2;
-       if (reaction.attackCardId === CardId.DiveBomb || reaction.attackCardId === CardId.CrushingWeight) estimatedDmg = 4;
-       if (reaction.attackCardId === CardId.Bite) estimatedDmg = 3;
-       
-       if (ai.hp <= estimatedDmg) shouldEvade = true;
-       else if (estimatedDmg >= 3) shouldEvade = true;
-       else if (ai.hp < ai.maxHp * 0.5 && Math.random() > 0.4) shouldEvade = true;
+        const attacker = state.players[reaction.attackerId];
+        const estimatedDmg = getEstimatedAttackDamage(reaction.attackCardId, attacker?.statuses || []);
 
-       return {
-           type: 'RESOLVE_AGILE',
-           playerId: aiId,
-           useAgile: shouldEvade,
-           rng: Array.from({length: 5}, () => Math.random())
-       };
-   }
+        let shouldEvade = false;
+        // Avoid lethal damage
+        if (ai.hp <= estimatedDmg) {
+            shouldEvade = true;
+        } else if (estimatedDmg >= 3) {
+            shouldEvade = true;
+        } else if (ai.hp <= ai.maxHp * 0.5 && estimatedDmg >= 2) {
+            shouldEvade = Math.random() > 0.15; // 85% chance
+        } else if (ai.stamina >= 3 && estimatedDmg >= 2) {
+            shouldEvade = Math.random() > 0.35; // 65% chance
+        }
 
-   // Handle Big Claws Choice
-   if (state.pendingChoice && state.pendingChoice.playerId === aiId) {
-       const options = state.pendingChoice.options;
-       let choice = 'Attack';
-       
-       if (ai.hp < 5 && options.includes('Dig')) {
-           choice = 'Dig'; // Hide if low HP
-       } else if (options.includes('Climb') && Math.random() > 0.7) {
-           choice = 'Climb'; // Sometimes climb for tactical evasion
-       }
-       
-       return {
-           type: 'RESOLVE_CHOICE',
-           playerId: aiId,
-           choice,
-           rng: Array.from({length: 5}, () => Math.random())
-       }
-   }
+        return {
+            type: 'RESOLVE_AGILE',
+            playerId: aiId,
+            useAgile: shouldEvade,
+            rng: Array.from({ length: 5 }, () => Math.random())
+        };
+    }
 
-   return null;
-}
+    // 2. Handle Big Claws Tactical Choice (Attack vs Dig vs Climb)
+    if (state.pendingChoice && state.pendingChoice.playerId === aiId) {
+        const options = state.pendingChoice.options;
+        const opponentId = Object.keys(state.players).find(id => id !== aiId);
+        const opponent = opponentId ? state.players[opponentId] : null;
 
-export const computeAiActions = (state: GameState, aiId: string): GameAction[] => {
-  const actions: GameAction[] = [];
-  const ai = state.players[aiId];
-  if (!ai) return [];
-  
-  const opponentId = Object.keys(state.players).find(id => id !== aiId)!;
-  const opponent = state.players[opponentId];
-  
-  let currentStamina = ai.stamina;
-  let cardsPlayed = ai.cardsPlayedThisTurn;
-  let hasActed = ai.hasActedThisTurn;
+        let choice = 'Attack';
+        // Low HP -> Dig for Hidden defense
+        if (ai.hp <= 5 && options.includes('Dig')) {
+            choice = 'Dig';
+        } else if (options.includes('Climb') && opponent && !opponent.statuses.some(s => s.type === 'Flying')) {
+            // If opponent cannot fly, Climb grants complete ground immunity
+            choice = Math.random() > 0.3 ? 'Climb' : 'Attack';
+        } else if (options.includes('Attack')) {
+            choice = 'Attack';
+        }
 
-  // To correctly simulate the turn, we need to track which card we decide to play
-  // so we can use it in the action phase immediately (since play/action can happen same turn).
-  let cardPlayedInstance: CardInstance | null = null;
+        return {
+            type: 'RESOLVE_CHOICE',
+            playerId: aiId,
+            choice,
+            rng: Array.from({ length: 5 }, () => Math.random())
+        };
+    }
 
-  // --- 0. FREE ACTION STAMINA BOOSTERS (Adrenaline Rush & Short Burst) ---
-  const adrenalineCard = ai.hand.find(c => CARDS[c.defId].id === CardId.AdrenalineRush);
-  const hasUsedAdrenaline = ai.usedAbilitiesThisTurn?.includes(CardId.AdrenalineRush) ||
-    (adrenalineCard && ai.usedAbilitiesThisTurn?.includes(adrenalineCard.instanceId));
-  if (adrenalineCard && !hasUsedAdrenaline && (currentStamina < 2 || ai.hp < 10)) {
-      actions.push({
-          type: 'PLAY_CARD',
-          playerId: aiId,
-          cardInstanceId: adrenalineCard.instanceId
-      });
-      currentStamina += 1;
-  }
+    return null;
+};
 
-  const burstCard = ai.hand.find(c => CARDS[c.defId].id === CardId.ShortBurst);
-  const hasUsedBurst = ai.usedAbilitiesThisTurn?.includes(CardId.ShortBurst) ||
-    (burstCard && ai.usedAbilitiesThisTurn?.includes(burstCard.instanceId));
-  if (burstCard && !hasUsedBurst && currentStamina < 2) {
-      actions.push({
-          type: 'PLAY_CARD',
-          playerId: aiId,
-          cardInstanceId: burstCard.instanceId
-      });
-      currentStamina += 1;
-  }
+// Compute the SINGLE best next action for the AI given the current live state
+export const computeNextAiAction = (state: GameState, aiId: string): GameAction => {
+    const ai = state.players[aiId];
+    if (!ai) {
+        return { type: 'END_TURN', playerId: aiId, rng: Array.from({ length: 5 }, () => Math.random()) };
+    }
 
-  // --- 1. PLAY CARD PHASE ---
-  // Check for Evolve Logic
-  const evolveCard = ai.hand.find(c => CARDS[c.defId].id === CardId.Evolve);
-  if (evolveCard && currentStamina >= 2) {
-      actions.push({
-          type: 'PLAY_CARD',
-          playerId: aiId,
-          cardInstanceId: evolveCard.instanceId
-      });
-      currentStamina -= 2;
-  }
+    const opponentId = Object.keys(state.players).find(id => id !== aiId) || '';
+    const opponent = state.players[opponentId];
+    if (!opponent) {
+        return { type: 'END_TURN', playerId: aiId, rng: Array.from({ length: 5 }, () => Math.random()) };
+    }
 
-  const maxAllowedPlays = 1 + (ai.extraCardPlays || 0) + (evolveCard && currentStamina >= 0 ? 1 : 0);
-  if (cardsPlayed < maxAllowedPlays) {
-      // Try to find an upgrade first
-      const upgrades = ai.hand.filter(c => CARDS[c.defId].isUpgrade);
-      let playedUpgrade = false;
-      
-      for (const upg of upgrades) {
-      const def = CARDS[upg.defId];
-      if (currentStamina >= def.staminaCost && def.upgradeTarget) {
-          const target = ai.formation.find(c => def.upgradeTarget!.includes(c.defId));
-          if (target) {
-          actions.push({
-              type: 'PLAY_CARD',
-              playerId: aiId,
-              cardInstanceId: upg.instanceId,
-              targetInstanceId: target.instanceId
-          });
-          currentStamina -= def.staminaCost;
-          cardsPlayed++; 
-          playedUpgrade = true;
-          break;
-          }
-      }
-      }
+    const currentStamina = ai.stamina;
+    const cardsPlayed = ai.cardsPlayedThisTurn;
+    const freeCardPlays = 1 + (ai.extraCardPlays || 0);
+    const isPayingForExtraCard = cardsPlayed >= freeCardPlays;
 
-      // If no upgrade, play a normal card
-      if (!playedUpgrade) {
-      const validCards = ai.hand.filter(c => {
-          const def = CARDS[c.defId];
-          const typeMatch = ai.hasCustomDeck || def.creatureTypes === 'All' || def.creatureTypes.includes(ai.creatureType);
-          // Explicitly filter out Evolve/Apex and instant free-use cards
-          return typeMatch && !def.isUpgrade && def.id !== CardId.Evolve && def.id !== CardId.ApexEvolution && def.id !== CardId.AdrenalineRush && def.id !== CardId.ShortBurst;
-      });
+    // --- STEP 1: FREE STAMINA BOOSTERS FROM HAND ---
+    // Short Burst: +1 Stamina
+    const burstCard = ai.hand.find(c => CARDS[c.defId].id === CardId.ShortBurst);
+    const usedBurst = ai.usedAbilitiesThisTurn?.includes(CardId.ShortBurst) ||
+        (burstCard && ai.usedAbilitiesThisTurn?.includes(burstCard.instanceId));
+    if (burstCard && !usedBurst && currentStamina <= 2) {
+        return {
+            type: 'PLAY_CARD',
+            playerId: aiId,
+            cardInstanceId: burstCard.instanceId
+        };
+    }
 
-      if (validCards.length > 0) {
-          const physCount = ai.formation.filter(c => CARDS[c.defId].type === CardType.Physical).length;
+    // Adrenaline Rush: +1 Stamina
+    const adrenalineCard = ai.hand.find(c => CARDS[c.defId].id === CardId.AdrenalineRush);
+    const usedAdrenaline = ai.usedAbilitiesThisTurn?.includes(CardId.AdrenalineRush) ||
+        (adrenalineCard && ai.usedAbilitiesThisTurn?.includes(adrenalineCard.instanceId));
+    if (adrenalineCard && !usedAdrenaline && (currentStamina <= 1 || (ai.hp <= 8 && currentStamina <= 2))) {
+        return {
+            type: 'PLAY_CARD',
+            playerId: aiId,
+            cardInstanceId: adrenalineCard.instanceId
+        };
+    }
 
-          // Heuristic: Play Physical if few physicals, else Ability
-          let chosen = validCards.find(c => CARDS[c.defId].type === CardType.Physical);
-          if (!chosen || physCount >= 2) {
-              chosen = validCards.find(c => CARDS[c.defId].type === CardType.Ability) || validCards[0];
-          }
-          
-          if (chosen) {
-              actions.push({
-                  type: 'PLAY_CARD',
-                  playerId: aiId,
-                  cardInstanceId: chosen.instanceId
-              });
-              cardPlayedInstance = chosen;
-              cardsPlayed++;
-          }
-      }
-      }
-  }
+    // --- STEP 2: APEX EVOLUTION FROM HAND ---
+    const apexCard = ai.hand.find(c => CARDS[c.defId].id === CardId.ApexEvolution);
+    if (apexCard && currentStamina >= 2) {
+        const allCards = Object.values(CARDS);
+        const upgradableInFormation = ai.formation.find(c => {
+            const def = CARDS[c.defId];
+            return allCards.some(uc => uc.isUpgrade && uc.upgradeTarget?.includes(def.id));
+        });
+        if (upgradableInFormation) {
+            return {
+                type: 'PLAY_APEX_EVOLUTION',
+                playerId: aiId,
+                apexCardInstanceId: apexCard.instanceId,
+                targetFormationInstanceId: upgradableInFormation.instanceId
+            };
+        }
+    }
 
-  // --- APEX EVOLUTION LOGIC ---
-  // This is a free action ability, so we check if we can use it regardless of main action state
-  const apexCard = ai.hand.find(c => CARDS[c.defId].id === CardId.ApexEvolution);
-  if (apexCard && currentStamina >= 2) {
-      // Look for upgradable card in formation
-      const allCards = Object.values(CARDS);
-      const upgradableCard = ai.formation.find(c => {
-           const def = CARDS[c.defId];
-           // Check if any upgrade card targets this defId
-           return allCards.some(uc => uc.isUpgrade && uc.upgradeTarget?.includes(def.id));
-      });
+    // --- STEP 3: PLAY CARD INTO FORMATION ---
+    // Can play if free play, OR if extra play and has >= 2 stamina
+    const canPlayCardNow = !isPayingForExtraCard || currentStamina >= 2;
 
-      if (upgradableCard) {
-          actions.push({
-              type: 'PLAY_APEX_EVOLUTION',
-              playerId: aiId,
-              apexCardInstanceId: apexCard.instanceId,
-              targetFormationInstanceId: upgradableCard.instanceId
-          });
-          currentStamina -= 2;
-      }
-  }
+    if (canPlayCardNow) {
+        // Evolve: grants extra card play
+        const evolveCard = ai.hand.find(c => CARDS[c.defId].id === CardId.Evolve);
+        if (evolveCard && currentStamina >= 2 && !isPayingForExtraCard) {
+            return {
+                type: 'PLAY_CARD',
+                playerId: aiId,
+                cardInstanceId: evolveCard.instanceId
+            };
+        }
 
-  // --- 2. ACTION PHASE (Up to 1 Ability AND 1 Attack per turn) ---
-  const isStuck = ai.statuses.some(s => s.type === 'Stuck');
-  if (!isStuck) {
-      let aiHasAttacked = !!ai.hasAttackedThisTurn;
-      let aiHasUsedAbility = !!ai.hasUsedAbilityThisTurn;
-      const usedAbilityCardIds: string[] = [...(ai.usedAbilitiesThisTurn || [])];
+        // Upgrades in hand
+        const upgrades = ai.hand.filter(c => CARDS[c.defId].isUpgrade);
+        for (const upg of upgrades) {
+            const def = CARDS[upg.defId];
+            if (def.upgradeTarget) {
+                const target = ai.formation.find(c => def.upgradeTarget!.includes(c.defId));
+                if (target) {
+                    return {
+                        type: 'PLAY_CARD',
+                        playerId: aiId,
+                        cardInstanceId: upg.instanceId,
+                        targetInstanceId: target.instanceId
+                    };
+                }
+            }
+        }
 
-      const availableActions: { instanceId: string, defId: string }[] = [];
-      ai.formation.forEach(c => availableActions.push({ instanceId: c.instanceId, defId: c.defId }));
-      if (cardPlayedInstance) {
-        availableActions.push({ instanceId: cardPlayedInstance.instanceId, defId: cardPlayedInstance.defId });
-      }
+        // Normal card to play
+        const validCards = ai.hand.filter(c => {
+            const def = CARDS[c.defId];
+            const typeMatch = ai.hasCustomDeck || def.creatureTypes === 'All' || def.creatureTypes.includes(ai.creatureType);
+            const notAlreadyInFormation = !ai.formation.some(f => f.defId === def.id);
+            const notSpecialInstant = def.id !== CardId.Evolve && def.id !== CardId.ApexEvolution &&
+                def.id !== CardId.AdrenalineRush && def.id !== CardId.ShortBurst && !def.isUpgrade;
+            const sizeOk = def.id !== CardId.CrushingWeight || ai.size === 'Big';
+            return typeMatch && notAlreadyInFormation && notSpecialInstant && sizeOk;
+        });
 
-      // Allow up to 2 actions: 1 Ability and 1 Attack if stamina permits
-      for (let step = 0; step < 2; step++) {
-          const affordableActions = availableActions.filter(c => {
+        if (validCards.length > 0) {
+            const scoredCards = validCards.map(c => {
+                const def = CARDS[c.defId];
+                let score = 10;
+
+                // Habitat bonus
+                if (def.habitats !== 'All' && Array.isArray(def.habitats) && def.habitats.includes(state.habitat)) {
+                    score += 8;
+                }
+
+                // Balance formation: need at least 1-2 attacks and 1-2 abilities
+                const currentPhysicals = ai.formation.filter(f => CARDS[f.defId].type === CardType.Physical).length;
+                const currentAbilities = ai.formation.filter(f => CARDS[f.defId].type === CardType.Ability).length;
+
+                if (def.type === CardType.Physical) {
+                    if (currentPhysicals === 0) score += 12;
+                    else if (currentPhysicals === 1) score += 6;
+                    // High impact attacks
+                    if (def.id === CardId.Bite || def.id === CardId.DiveBomb || def.id === CardId.CrushingWeight) score += 6;
+                } else if (def.type === CardType.Ability) {
+                    if (currentAbilities === 0) score += 10;
+                    // High tier abilities
+                    if (def.id === CardId.Focus || def.id === CardId.Hibernate || def.id === CardId.Regeneration || def.id === CardId.Flight) {
+                        score += 8;
+                    }
+                }
+
+                return { c, def, score };
+            });
+
+            scoredCards.sort((a, b) => b.score - a.score);
+            const bestCard = scoredCards[0];
+
+            // If it's a free play: play it!
+            // If it's an extra play (costs 2 stamina): only play if stamina is healthy (>= 3) and score is solid
+            if (!isPayingForExtraCard || (currentStamina >= 3 && bestCard.score >= 12)) {
+                return {
+                    type: 'PLAY_CARD',
+                    playerId: aiId,
+                    cardInstanceId: bestCard.c.instanceId
+                };
+            }
+        }
+    }
+
+    // --- STEP 4: STATUS BREAKOUT / ESCAPE CHECK ---
+    const isStuckOrGrappled = ai.statuses.some(s => s.type === 'Stuck' || s.type === 'Grappled');
+    if (isStuckOrGrappled) {
+        // Focus breaks out + gives +1 Damage Buff + guaranteed Heads!
+        const focusCard = ai.formation.find(c => CARDS[c.defId].id === CardId.Focus);
+        const hasUsedFocus = ai.usedAbilitiesThisTurn?.includes(CardId.Focus) ||
+            (focusCard && ai.usedAbilitiesThisTurn?.includes(focusCard.instanceId));
+        if (focusCard && !hasUsedFocus && currentStamina >= 1) {
+            return {
+                type: 'USE_ACTION',
+                playerId: aiId,
+                actionType: 'ABILITY',
+                cardInstanceId: focusCard.instanceId,
+                targetPlayerId: opponentId,
+                rng: Array.from({ length: 5 }, () => Math.random())
+            };
+        }
+
+        // Rage breaks out + gives +1 Damage Buff!
+        const rageCard = ai.formation.find(c => CARDS[c.defId].id === CardId.Rage);
+        const hasUsedRage = ai.usedAbilitiesThisTurn?.includes(CardId.Rage) ||
+            (rageCard && ai.usedAbilitiesThisTurn?.includes(rageCard.instanceId));
+        if (rageCard && !hasUsedRage && currentStamina >= 1) {
+            return {
+                type: 'USE_ACTION',
+                playerId: aiId,
+                actionType: 'ABILITY',
+                cardInstanceId: rageCard.instanceId,
+                targetPlayerId: opponentId,
+                rng: Array.from({ length: 5 }, () => Math.random())
+            };
+        }
+
+        // Shed Skin cures statuses
+        const shedCard = ai.formation.find(c => CARDS[c.defId].id === CardId.ShedSkin);
+        const hasUsedShed = ai.usedAbilitiesThisTurn?.includes(CardId.ShedSkin) ||
+            (shedCard && ai.usedAbilitiesThisTurn?.includes(shedCard.instanceId));
+        if (shedCard && !hasUsedShed && currentStamina >= 2) {
+            return {
+                type: 'USE_ACTION',
+                playerId: aiId,
+                actionType: 'ABILITY',
+                cardInstanceId: shedCard.instanceId,
+                targetPlayerId: opponentId,
+                rng: Array.from({ length: 5 }, () => Math.random())
+            };
+        }
+    }
+
+    // --- STEP 5: SYNERGY FREE ACTIONS ---
+    // If AI has Focus and hasn't used it: Focus gives breakout + +1 dmg buff + guaranteed heads!
+    const focusCard = ai.formation.find(c => CARDS[c.defId].id === CardId.Focus);
+    const hasUsedFocus = ai.usedAbilitiesThisTurn?.includes(CardId.Focus) ||
+        (focusCard && ai.usedAbilitiesThisTurn?.includes(focusCard.instanceId));
+    const canAttackThisTurn = !ai.hasAttackedThisTurn && !ai.statuses.some(s => s.type === 'CannotAttack' || s.type === 'Stuck');
+    if (focusCard && !hasUsedFocus && currentStamina >= 1 && canAttackThisTurn) {
+        return {
+            type: 'USE_ACTION',
+            playerId: aiId,
+            actionType: 'ABILITY',
+            cardInstanceId: focusCard.instanceId,
+            targetPlayerId: opponentId,
+            rng: Array.from({ length: 5 }, () => Math.random())
+        };
+    }
+
+    // If opponent is Hidden / Camouflaged, use Enhanced Smell to reveal and chase!
+    const opponentIsHidden = opponent.statuses.some(s => s.type === 'Hidden' || s.type === 'Camouflaged');
+    const smellCard = ai.formation.find(c => CARDS[c.defId].id === CardId.EnhancedSmell);
+    const hasUsedSmell = ai.usedAbilitiesThisTurn?.includes(CardId.EnhancedSmell) ||
+        (smellCard && ai.usedAbilitiesThisTurn?.includes(smellCard.instanceId));
+    if (smellCard && opponentIsHidden && !hasUsedSmell && currentStamina >= 1) {
+        return {
+            type: 'USE_ACTION',
+            playerId: aiId,
+            actionType: 'ABILITY',
+            cardInstanceId: smellCard.instanceId,
+            targetPlayerId: opponentId,
+            rng: Array.from({ length: 5 }, () => Math.random())
+        };
+    }
+
+    // --- STEP 6: EVALUATE ALL ACTIONS (ATTACK & MAIN ABILITY) ---
+    const opponentIsClimbing = opponent.statuses.some(s => s.type === 'Climbing');
+    const opponentIsFlying = opponent.statuses.some(s => s.type === 'Flying');
+    const aiIsFlying = ai.statuses.some(s => s.type === 'Flying');
+    const aiIsAccurate = ai.statuses.some(s => s.type === 'Accurate');
+    const hasDamageBuff = ai.statuses.some(s => s.type === 'DamageBuff');
+
+    const availableActions = ai.formation.filter(c => {
+        const def = CARDS[c.defId];
+        const isAbility = def.type === CardType.Ability || (def.type === CardType.Special && def.id === CardId.ApexEvolution);
+        const isAttack = !isAbility && def.type === CardType.Physical;
+
+        // Passive cards cannot be activated
+        if (def.id === CardId.StrongBuild || def.type === CardType.Size || def.id === CardId.Amphibious ||
+            def.id === CardId.CamouflageWater || def.id === CardId.PoisonSkin || def.id === CardId.BarbedQuills ||
+            def.id === CardId.ArmoredScales || def.id === CardId.ArmoredExoskeleton || def.id === CardId.KeenEyesight ||
+            def.id === CardId.SwimsWell) {
+            return false;
+        }
+
+        const isFreeAction = def.id === CardId.ShortBurst || def.id === CardId.AdrenalineRush ||
+            def.id === CardId.EnhancedSmell || def.id === CardId.Focus || def.id === CardId.Rage ||
+            (def.id === CardId.Agile && def.type === CardType.Ability);
+
+        if (isAttack) {
+            if (ai.hasAttackedThisTurn) return false;
+            if (ai.statuses.some(s => s.type === 'CannotAttack' || s.type === 'Stuck')) return false;
+        }
+
+        if (isAbility) {
+            const alreadyUsed = (ai.usedAbilitiesThisTurn && (
+                ai.usedAbilitiesThisTurn.includes(c.instanceId) ||
+                ai.usedAbilitiesThisTurn.includes(def.id)
+            )) || c.usedThisTurn;
+            if (alreadyUsed) return false;
+            if (!isFreeAction && ai.hasUsedAbilityThisTurn) return false;
+        }
+
+        const isHealingHibernate = def.id === CardId.Hibernate && ai.hp < ai.maxHp;
+        const effectiveCost = isHealingHibernate ? 0 : def.staminaCost;
+        if (effectiveCost > currentStamina) return false;
+
+        return true;
+    });
+
+    if (availableActions.length > 0) {
+        const scoredActions = availableActions.map(c => {
             const def = CARDS[c.defId];
             const isAbility = def.type === CardType.Ability || (def.type === CardType.Special && def.id === CardId.ApexEvolution);
-            const isAttack = !isAbility && def.type === CardType.Physical;
-
-            if (isAttack && aiHasAttacked) return false;
-            if (isAbility) {
-                if (aiHasUsedAbility) return false;
-                if (usedAbilityCardIds.includes(c.instanceId) || usedAbilityCardIds.includes(def.id)) return false;
-            }
-
-            const isHealingHibernate = def.id === CardId.Hibernate && ai.hp < ai.maxHp;
-            const effectiveCost = isHealingHibernate ? 0 : def.staminaCost;
-            if (effectiveCost > currentStamina) return false;
-
-            if (def.id === CardId.StrongBuild || def.type === CardType.Size || def.id === CardId.Amphibious || def.id === CardId.CamouflageWater || def.id === CardId.PoisonSkin || def.id === CardId.BarbedQuills || def.id === CardId.ArmoredScales || def.id === CardId.ArmoredExoskeleton) return false;
-
-            return isAttack || isAbility;
-          });
-
-          if (affordableActions.length === 0) break;
-
-          // Scoring System
-          const scoredActions = affordableActions.map(c => {
-            const def = CARDS[c.defId];
             let score = 0;
             let extraPayload: any = {};
-            
-            // Heals - High priority if low HP
-            if (def.id === CardId.Regeneration) {
-              if (ai.hp < ai.maxHp * 0.4) score += 20;
-              else if (ai.hp < ai.maxHp * 0.7) score += 5;
-              else score -= 10;
+
+            // --- PHYSICAL ATTACK SCORING ---
+            if (!isAbility) {
+                let dmg = 2;
+                if (def.id === CardId.DiveBomb || def.id === CardId.CrushingWeight) dmg = 4;
+                else if (def.id === CardId.Bite || def.id === CardId.BigClaws) dmg = 3;
+                else if (def.id === CardId.GraspingTalons || def.id === CardId.VenomousFangs || def.id === CardId.Leech) dmg = 1;
+
+                if (hasDamageBuff) dmg += 1;
+                if (def.id === CardId.SwimFast && state.habitat === Habitat.Water) dmg += 2;
+
+                // Evasion penalties
+                if (opponentIsClimbing && !aiIsFlying && def.id !== CardId.DiveBomb) {
+                    // Cannot hit climbing opponent with ground attack!
+                    return { c, def, score: -100, isAbility: false, extraPayload };
+                }
+                if (opponentIsHidden) {
+                    // 100% miss into hidden target!
+                    return { c, def, score: -100, isAbility: false, extraPayload };
+                }
+
+                // Lethal priority
+                if (opponent.hp <= dmg) {
+                    score += 5000;
+                } else {
+                    score += dmg * 12;
+                }
+
+                // Penalty if target has 50% flying miss and attacker isn't accurate
+                if (opponentIsFlying && !aiIsAccurate) {
+                    score -= 5;
+                }
             }
 
-            if (def.id === CardId.Hibernate) {
-              if (ai.hp < ai.maxHp) {
-                score += 25; // Free 2 HP heal + 1 stamina!
-              } else {
-                score -= 10;
-              }
+            // --- ABILITY SCORING ---
+            if (isAbility) {
+                // Hibernate: Free heal + stamina when damaged
+                if (def.id === CardId.Hibernate) {
+                    if (ai.hp < ai.maxHp) {
+                        const missingHp = ai.maxHp - ai.hp;
+                        score += 35 + missingHp * 5;
+                    } else {
+                        score -= 20;
+                    }
+                }
+
+                // Regeneration: Heal 4 HP
+                if (def.id === CardId.Regeneration) {
+                    if (ai.hp <= ai.maxHp * 0.5) score += 40;
+                    else if (ai.hp <= ai.maxHp * 0.75) score += 20;
+                    else score -= 15;
+                }
+
+                // Flight: evades ground attacks + buffs Dive Bomb
+                if (def.id === CardId.Flight) {
+                    if (!aiIsFlying) {
+                        score += 28;
+                        if (ai.formation.some(f => f.defId === CardId.DiveBomb)) score += 12;
+                    } else {
+                        score -= 50;
+                    }
+                }
+
+                // Dig / Freeze: Hides underground
+                if (def.id === CardId.Dig || def.id === CardId.Freeze) {
+                    if (ai.hp <= 6) score += 32;
+                    else score += 10;
+                }
+
+                // Roar: stops opponent attack
+                if (def.id === CardId.Roar) {
+                    if (!opponent.hasAttackedThisTurn && opponent.hp > 3) score += 26;
+                    else score += 5;
+                }
+
+                // Ambush Attack: Gives Accurate (cannot be evaded)
+                if (def.id === CardId.AmbushAttack) {
+                    if (opponentIsFlying || opponent.statuses.some(s => s.type === 'Camouflaged') || opponent.hasCustomDeck) {
+                        score += 30;
+                    } else {
+                        score += 15;
+                    }
+                }
+
+                // Toxic Spit: Poison or stuck
+                if (def.id === CardId.ToxicSpit) {
+                    if (!opponent.statuses.some(s => s.type === 'Poisoned')) score += 24;
+                    else score += 10;
+                }
+
+                // Territorial Display: Discard opponent's hand
+                if (def.id === CardId.TerritorialDisplay) {
+                    if (opponent.hand.length >= 2) score += 28;
+                    else if (opponent.hand.length === 1) score += 14;
+                    else score -= 20;
+                }
+
+                // Copycat: Steal best card from opponent
+                if (def.id === CardId.Copycat) {
+                    if (opponent.hand.length > 0) {
+                        score += 25;
+                        const sortedHand = [...opponent.hand].sort((a, b) => CARDS[b.defId].staminaCost - CARDS[a.defId].staminaCost);
+                        extraPayload.targetHandCardId = sortedHand[0].instanceId;
+                    } else {
+                        score -= 50;
+                    }
+                }
+
+                // Confuse: Makes opponent attack self on tails
+                if (def.id === CardId.Confuse) {
+                    score += 22;
+                }
+
+                // Shed Skin: cleanses poison / debt
+                if (def.id === CardId.ShedSkin) {
+                    if (ai.statuses.some(s => s.type === 'Poisoned' || s.type === 'StaminaDebt' || s.type === 'Stuck')) {
+                        score += 35;
+                    } else {
+                        score -= 30;
+                    }
+                }
             }
 
-            // Attacks
-            if (def.type === CardType.Physical) {
-               let dmg = 2; 
-               if (def.id === CardId.Bite) dmg = 3;
-               if (def.id === CardId.DiveBomb) dmg = 4;
-               if (def.id === CardId.CrushingWeight) dmg = 4;
-               if (def.id === CardId.BigClaws) dmg = 3;
-               if (def.id === CardId.GraspingTalons || def.id === CardId.VenomousFangs || def.id === CardId.Leech) dmg = 1;
-               
-               if (opponent.hp <= dmg) score += 1000; // Lethal
-               else score += dmg * 2;
-            }
+            return { c, def, score, isAbility, extraPayload };
+        });
 
-            // High synergy abilities
-            if (def.id === CardId.Focus) score += 18;
-            if (def.id === CardId.Rage) score += 12;
-            if (def.id === CardId.AdrenalineRush) score += 18;
+        scoredActions.sort((a, b) => b.score - a.score);
+        const best = scoredActions[0];
 
-            // Copycat
-            if (def.id === CardId.Copycat) {
-               if (opponent.hand.length > 0) {
-                  score += 15;
-                  const bestSteal = [...opponent.hand].sort((a,b) => CARDS[b.defId].staminaCost - CARDS[a.defId].staminaCost)[0];
-                  extraPayload.targetHandCardId = bestSteal.instanceId;
-               } else {
-                  score -= 100;
-               }
-            }
+        if (best && best.score > 0) {
+            return {
+                type: 'USE_ACTION',
+                playerId: aiId,
+                actionType: best.isAbility ? 'ABILITY' : 'ATTACK',
+                cardInstanceId: best.c.instanceId,
+                targetPlayerId: opponentId,
+                rng: Array.from({ length: 10 }, () => Math.random()),
+                ...best.extraPayload
+            };
+        }
+    }
 
-            // Debuffs / Control
-            if (def.id === CardId.Confuse) score += 8;
-            if (def.id === CardId.ToxicSpit) score += 8;
-            if (def.id === CardId.TerritorialDisplay) score += 6;
+    // --- STEP 7: NO MORE ACTIONS -> END TURN ---
+    return {
+        type: 'END_TURN',
+        playerId: aiId,
+        rng: Array.from({ length: 10 }, () => Math.random())
+    };
+};
 
-            // Randomize slightly to make AI less predictable
-            score += Math.random() * 2;
-
-            return { c, score, def, extraPayload };
-          });
-
-          // Sort by score descending
-          scoredActions.sort((a, b) => b.score - a.score);
-          const bestAction = scoredActions[0];
-
-          if (bestAction && bestAction.score > 0) {
-             const isAbility = bestAction.def.type === CardType.Ability || bestAction.def.type === CardType.Special;
-             const isHealingHibernate = bestAction.def.id === CardId.Hibernate && ai.hp < ai.maxHp;
-             const cost = isHealingHibernate ? 0 : bestAction.def.staminaCost;
-
-             actions.push({
-               type: 'USE_ACTION',
-               playerId: aiId,
-               actionType: isAbility ? 'ABILITY' : 'ATTACK',
-               cardInstanceId: bestAction.c.instanceId,
-               targetPlayerId: opponentId,
-               rng: Array.from({length: 10}, () => Math.random()),
-               ...bestAction.extraPayload
-             });
-
-             currentStamina -= cost;
-             if (isAbility) {
-                aiHasUsedAbility = true;
-                usedAbilityCardIds.push(bestAction.c.instanceId);
-                usedAbilityCardIds.push(bestAction.def.id);
-             } else {
-                aiHasAttacked = true;
-             }
-          } else {
-             break;
-          }
-      }
-  }
-
-  // --- 3. END TURN ---
-  actions.push({
-    type: 'END_TURN',
-    playerId: aiId,
-    rng: Array.from({length: 10}, () => Math.random())
-  });
-
-  return actions;
+// Full turn simulator (legacy fallback)
+export const computeAiActions = (state: GameState, aiId: string): GameAction[] => {
+    return [computeNextAiAction(state, aiId)];
 };

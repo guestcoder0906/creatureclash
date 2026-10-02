@@ -4,7 +4,7 @@ import { DeckBuilder } from './components/DeckBuilder';
 import { gameReducer, createPlayer, createCustomPlayer, generateRandomAiDeck } from './services/gameEngine';
 import { GameState, GameAction, Habitat, CardId, CreatureType } from './types';
 import { getRandomElement } from './constants';
-import { computeAiActions, computeReaction } from './services/aiLogic';
+import { computeAiActions, computeReaction, computeNextAiAction } from './services/aiLogic';
 
 const App: React.FC = () => {
   const [status, setStatus] = useState<'menu' | 'deckbuilder' | 'rules' | 'playing'>('menu');
@@ -40,42 +40,60 @@ const App: React.FC = () => {
     
     const aiId = 'ai-bot';
     
-    // Check for Pending Reaction Target = AI
-    if (gameState.pendingReaction && gameState.pendingReaction.targetId === aiId) {
-        // AI needs to react
+    // 1. Handle Pending Choice for AI (e.g. Big Claws choice: Attack / Dig / Climb)
+    if (gameState.pendingChoice && gameState.pendingChoice.playerId === aiId) {
         if (aiTurnTimeoutRef.current) clearTimeout(aiTurnTimeoutRef.current);
         aiTurnTimeoutRef.current = setTimeout(() => {
             const reaction = computeReaction(gameState, aiId);
             if (reaction) dispatch(reaction);
-        }, 1600); // Cooldown for AI reaction
+        }, 1100);
         return;
     }
 
-    if (gameState.currentPlayer === aiId && gameState.phase !== 'end' && !gameState.pendingReaction && !gameState.activeCoinFlip) {
-      // It's AI's turn
+    // 2. Handle Pending Reaction Target = AI (e.g. Agile reaction to player attack)
+    if (gameState.pendingReaction && gameState.pendingReaction.targetId === aiId) {
+        if (aiTurnTimeoutRef.current) clearTimeout(aiTurnTimeoutRef.current);
+        aiTurnTimeoutRef.current = setTimeout(() => {
+            const reaction = computeReaction(gameState, aiId);
+            if (reaction) dispatch(reaction);
+        }, 1100);
+        return;
+    }
+
+    // 3. AI Turn Execution: Compute and dispatch one fresh action based on live state
+    if (
+      gameState.currentPlayer === aiId && 
+      gameState.phase !== 'end' && 
+      !gameState.pendingReaction && 
+      !gameState.pendingChoice && 
+      !gameState.activeCoinFlip
+    ) {
       if (aiTurnTimeoutRef.current) clearTimeout(aiTurnTimeoutRef.current);
       
       aiTurnTimeoutRef.current = setTimeout(() => {
-        const actions = computeAiActions(gameState, aiId);
-        
-        let i = 0;
-        const executeNext = () => {
-          if (i < actions.length) {
-             dispatch(actions[i]);
-             i++;
-             if (i < actions.length) {
-                aiTurnTimeoutRef.current = setTimeout(executeNext, 2800); // 2.8s cooldown between AI actions
-             }
-          }
-        };
-        executeNext();
-      }, 1800); // 1.8s initial thinking pause at turn start
+        const nextAction = computeNextAiAction(gameState, aiId);
+        if (nextAction) {
+          dispatch(nextAction);
+        }
+      }, 1000); // 1.0s thinking pause between actions for crisp, responsive play
     }
 
     return () => {
       if (aiTurnTimeoutRef.current) clearTimeout(aiTurnTimeoutRef.current);
     };
-  }, [gameState?.currentPlayer, gameState?.turn, gameState?.pendingReaction, !!gameState?.activeCoinFlip]); 
+  }, [
+    gameState?.currentPlayer, 
+    gameState?.turn, 
+    gameState?.pendingReaction, 
+    gameState?.pendingChoice, 
+    !!gameState?.activeCoinFlip,
+    gameState?.players?.['ai-bot']?.stamina,
+    gameState?.players?.['ai-bot']?.hasAttackedThisTurn,
+    gameState?.players?.['ai-bot']?.hasUsedAbilityThisTurn,
+    gameState?.players?.['ai-bot']?.cardsPlayedThisTurn,
+    gameState?.players?.['ai-bot']?.formation?.length,
+    gameState?.players?.['ai-bot']?.hand?.length
+  ]); 
 
   const prepareGame = () => {
     const myId = 'local-player';

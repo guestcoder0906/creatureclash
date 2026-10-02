@@ -132,9 +132,9 @@ export const CARDS: Record<string, CardDef> = {
     isUpgrade: true, upgradeTarget: [CardId.SwimsWell]
   },
   [CardId.AmbushAttack]: {
-    id: CardId.AmbushAttack, name: "Ambush Attack", type: CardType.Physical, abilityStatus: AbilityStatus.None,
+    id: CardId.AmbushAttack, name: "Ambush Attack", type: CardType.Ability, abilityStatus: AbilityStatus.None,
     creatureTypes: [CreatureType.Reptile, CreatureType.Mammal], habitats: [Habitat.Forest], staminaCost: 1,
-    description: "Flip coin. Heads = opponent cannot evade."
+    description: "Ability. Flip coin: Heads = attacks cannot be evaded this turn."
   },
   [CardId.KeenEyesight]: {
     id: CardId.KeenEyesight, name: "Keen Eyesight", type: CardType.Physical, abilityStatus: AbilityStatus.None,

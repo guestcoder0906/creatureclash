@@ -406,14 +406,6 @@ export const gameReducer = (state: GS, action: GA): GS => {
                  }
                  return;
             }
-            if (def.id === CID.AmbushAttack) {
-                 if (performCoinFlip('Ambush Setup', getRNG(rng, rngIndex++), p.id)) {
-                      addStatus(p, { type: 'Accurate', duration: 1 }); 
-                      log(`${p.name} prepares Ambush (Cannot be evaded).`);
-                      notify("Ambush Ready!", 'success');
-                 }
-                 return;
-            }
             if (def.id === CID.SwimFast) {
                  if (newState.habitat === H.Water) {
                     const isImmobilized = target.statuses.some(s => s.type === 'Grappled' || s.type === 'Stuck');
@@ -655,6 +647,16 @@ export const gameReducer = (state: GS, action: GA): GS => {
             if (def.id === CID.Agile) {
                 addStatus(p, { type: 'Accurate', duration: 1 });
                 log(`${p.name} is moving with Agility (Accurate).`);
+            }
+            if (def.id === CID.AmbushAttack) {
+                 if (performCoinFlip('Ambush Attack', getRNG(rng, rngIndex++), p.id)) {
+                      addStatus(p, { type: 'Accurate', duration: 1 }); 
+                      log(`${p.name} prepared an Ambush! Attacks cannot be evaded.`);
+                      notify("Ambush Ready! Attacks cannot be evaded.", 'success');
+                 } else {
+                      log(`${p.name}'s Ambush failed.`);
+                      notify("Ambush failed!", 'warning');
+                 }
             }
             if (def.id === CID.Copycat && targetHandCardId) {
                  const targetCardIdx = target.hand.findIndex(c => c.instanceId === targetHandCardId);
