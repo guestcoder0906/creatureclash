@@ -23,7 +23,7 @@ const ACTIVE_ABILITIES = [
   CardId.Focus, CardId.FocusPlus, CardId.AdrenalineRush, CardId.StickyTongue, CardId.ShedSkin, 
   CardId.Rage, CardId.TerritorialDisplay, CardId.ExhaustingRoar, CardId.EnhancedSmell, 
   CardId.Copycat, CardId.Agile, CardId.Freeze, CardId.ApexEvolution,
-  CardId.ShortBurst, CardId.Dig, CardId.Roar, CardId.LoudHiss, CardId.Flight, CardId.Mimicry,
+  CardId.ShortBurst, CardId.Dig, CardId.Roar, CardId.Flight, CardId.Mimicry,
   CardId.StandOnHindLegs
 ];
 

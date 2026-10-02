@@ -223,11 +223,6 @@ export const CARDS: Record<string, CardDef> = {
     creatureTypes: [CreatureType.Mammal, CreatureType.Reptile, CreatureType.Amphibian], habitats: 'All', staminaCost: 2,
     description: "If damaged: Heal 2 HP & gain +1 Stamina (costs 0 Stamina). If full HP: Costs 2 Stamina to gain +1 Stamina."
   },
-  [CardId.LoudHiss]: {
-    id: CardId.LoudHiss, name: "Loud Hiss", type: CardType.Ability, abilityStatus: AbilityStatus.None,
-    creatureTypes: [CreatureType.Reptile], habitats: 'All', staminaCost: 0,
-    description: "Warning signal."
-  },
   [CardId.Flight]: {
     id: CardId.Flight, name: "Flight", type: CardType.Ability, abilityStatus: AbilityStatus.None,
     creatureTypes: [CreatureType.Avian], habitats: 'All', staminaCost: 1,

@@ -72,7 +72,6 @@ export enum CardId {
   Freeze = 'freeze',
   Roar = 'roar',
   Hibernate = 'hibernate',
-  LoudHiss = 'loud_hiss',
   Flight = 'flight',
   ToxicSpit = 'toxic_spit',
   Regeneration = 'regeneration',
