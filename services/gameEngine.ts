@@ -813,7 +813,7 @@ export const gameReducer = (state: GS, action: GA): GS => {
               const def = CARDS[id];
               return def && def.type !== CType.Size && isCardCompatible(nextPlayer, def);
           });
-          const pool = availablePool.length > 0 ? availablePool : [CID.Bite, CID.Claw, CID.Strike, CID.Evolve];
+          const pool = availablePool.length > 0 ? availablePool : [CID.Bite, CID.ClawAttack, CID.Roar, CID.Evolve];
           for (let i = 0; i < 6; i++) {
               const defId = pool[Math.floor(Math.random() * pool.length)];
               nextPlayer.deck.push({
