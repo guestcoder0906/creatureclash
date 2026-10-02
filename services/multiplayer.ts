@@ -26,6 +26,7 @@ export interface MultiplayerCallbacks {
   onOpponentJoined: (opponent: RemotePlayerInfo) => void;
   onOpponentLeft: () => void;
   onOpponentDisconnected?: () => void;
+  onRequestSync?: () => void;
   onGameStarted: (initialState: GameState) => void;
   onRemoteAction: (action: GameAction, state?: GameState) => void;
   onStateSync: (state: GameState) => void;
@@ -42,9 +43,11 @@ export class MultiplayerManager {
   private callbacks: MultiplayerCallbacks | null = null;
   private announceInterval: ReturnType<typeof setInterval> | null = null;
   private startGameTimeout: ReturnType<typeof setTimeout> | null = null;
+  private disconnectGraceTimeout: ReturnType<typeof setTimeout> | null = null;
   private gameStarted: boolean = false;
   private isLeaving: boolean = false;
   private beforeUnloadHandler: (() => void) | null = null;
+  private visibilityHandler: (() => void) | null = null;
 
   public init(
     roomCode: string,
@@ -86,6 +89,7 @@ export class MultiplayerManager {
       // 1. Listen for Realtime Broadcast Events
       this.channel
         .on('broadcast', { event: 'PLAYER_ANNOUNCE' }, (payload) => {
+          this.clearDisconnectGrace();
           const remotePlayer = payload.payload as RemotePlayerInfo;
           if (remotePlayer && remotePlayer.id !== this.localPlayer?.id) {
             this.handleOpponentFound(remotePlayer);
@@ -95,15 +99,18 @@ export class MultiplayerManager {
           }
         })
         .on('broadcast', { event: 'START_GAME' }, (payload) => {
+          this.clearDisconnectGrace();
           this.handleStartGame(payload.payload as { initialState: GameState });
         })
         .on('broadcast', { event: 'START_GAME_ACK' }, () => {
+          this.clearDisconnectGrace();
           if (this.startGameTimeout) {
             clearTimeout(this.startGameTimeout);
             this.startGameTimeout = null;
           }
         })
         .on('broadcast', { event: 'GAME_ACTION' }, (payload) => {
+          this.clearDisconnectGrace();
           const action = payload?.payload?.action;
           const state = payload?.payload?.state;
           if (action) {
@@ -113,35 +120,49 @@ export class MultiplayerManager {
           }
         })
         .on('broadcast', { event: 'SYNC_STATE' }, (payload) => {
+          this.clearDisconnectGrace();
           if (payload?.payload?.state) {
             this.callbacks?.onStateSync(payload.payload.state);
           }
         })
-        .on('broadcast', { event: 'PLAYER_DISCONNECTED' }, () => {
-          this.handleOpponentDisconnected();
+        .on('broadcast', { event: 'REQUEST_SYNC' }, () => {
+          this.clearDisconnectGrace();
+          this.callbacks?.onRequestSync?.();
+        })
+        .on('broadcast', { event: 'PLAYER_DISCONNECTED' }, (payload) => {
+          // ONLY trigger disconnect if the player explicitly closed/reloaded the window
+          if (payload?.payload?.explicitClose) {
+            this.handleOpponentDisconnected();
+          }
         })
         .on('broadcast', { event: 'EMOTE' }, (payload) => {
+          this.clearDisconnectGrace();
           if (payload?.payload?.emote) {
             this.callbacks?.onEmoteReceived(payload.payload.emote, payload.payload.senderName || 'Opponent');
           }
         })
         .on('broadcast', { event: 'REMATCH' }, () => {
+          this.clearDisconnectGrace();
           this.callbacks?.onRematchRequested();
         });
 
       // 2. Realtime Presence Tracking
       this.channel
         .on('presence', { event: 'sync' }, () => {
+          this.clearDisconnectGrace();
           this.handlePresenceSync();
         })
         .on('presence', { event: 'join' }, ({ newPresences }) => {
+          this.clearDisconnectGrace();
           this.processPresences(newPresences);
         })
         .on('presence', { event: 'leave' }, ({ leftPresences }) => {
           const oppLeft = leftPresences.some((p: any) => p.playerId !== this.localPlayer?.id);
           if (oppLeft) {
             if (this.gameStarted) {
-              this.handleOpponentDisconnected();
+              // During a match, DO NOT drop the game immediately if the player is just backgrounding the tab
+              // Give a 20-second grace period for background tab reconnects
+              this.startDisconnectGrace();
             } else {
               this.handleOpponentLeft();
             }
@@ -183,19 +204,46 @@ export class MultiplayerManager {
         }
       });
 
-      // 4. Attach window beforeunload to immediately notify peer on tab close / reload
+      // 4. Attach window beforeunload and pagehide ONLY to catch actual tab close or reload
       this.beforeUnloadHandler = () => {
         if (this.channel) {
-          this.broadcastEvent('PLAYER_DISCONNECTED', { playerId: this.localPlayer?.id });
+          // Explicit close/reload signal
+          this.broadcastEvent('PLAYER_DISCONNECTED', { playerId: this.localPlayer?.id, explicitClose: true });
         }
       };
       window.addEventListener('beforeunload', this.beforeUnloadHandler);
+      window.addEventListener('pagehide', this.beforeUnloadHandler);
+
+      // 5. When player returns to the tab after backgrounding, immediately request state sync
+      this.visibilityHandler = () => {
+        if (!document.hidden && this.channel && this.gameStarted) {
+          // Announce presence & request authoritative state from peer
+          this.broadcastEvent('REQUEST_SYNC', { requesterId: this.localPlayer?.id });
+        }
+      };
+      document.addEventListener('visibilitychange', this.visibilityHandler);
 
       return true;
     } catch (err: any) {
       console.error('Multiplayer initialization exception:', err);
       callbacks.onStatusChange('error', err?.message || 'Error connecting to room');
       return false;
+    }
+  }
+
+  private startDisconnectGrace() {
+    if (!this.disconnectGraceTimeout) {
+      this.disconnectGraceTimeout = setTimeout(() => {
+        this.handleOpponentDisconnected();
+        this.disconnectGraceTimeout = null;
+      }, 20000); // 20-second grace window for background tabs or temporary socket hiccups
+    }
+  }
+
+  private clearDisconnectGrace() {
+    if (this.disconnectGraceTimeout) {
+      clearTimeout(this.disconnectGraceTimeout);
+      this.disconnectGraceTimeout = null;
     }
   }
 
@@ -234,6 +282,7 @@ export class MultiplayerManager {
     if (!presences || !this.localPlayer) return;
     const opp = presences.find((p) => p.playerId && p.playerId !== this.localPlayer?.id);
     if (opp) {
+      this.clearDisconnectGrace();
       const oppInfo: RemotePlayerInfo = {
         id: opp.playerId,
         name: opp.name || 'Opponent',
@@ -268,9 +317,10 @@ export class MultiplayerManager {
   }
 
   private handleOpponentDisconnected() {
+    this.clearDisconnectGrace();
     this.opponentPlayer = null;
     this.callbacks?.onOpponentDisconnected?.();
-    this.callbacks?.onStatusChange('disconnected', 'The other player has disconnected.');
+    this.callbacks?.onStatusChange('disconnected', 'The other player has closed or reloaded the game.');
   }
 
   // Host starts the match with synchronized initial state
@@ -384,23 +434,36 @@ export class MultiplayerManager {
   public leaveRoom(): void {
     this.isLeaving = true;
     this.stopAnnounceLoop();
+    this.clearDisconnectGrace();
+
     if (this.beforeUnloadHandler) {
       window.removeEventListener('beforeunload', this.beforeUnloadHandler);
+      window.removeEventListener('pagehide', this.beforeUnloadHandler);
       this.beforeUnloadHandler = null;
     }
+
+    if (this.visibilityHandler) {
+      document.removeEventListener('visibilitychange', this.visibilityHandler);
+      this.visibilityHandler = null;
+    }
+
     if (this.startGameTimeout) {
       clearTimeout(this.startGameTimeout);
       this.startGameTimeout = null;
     }
+
     if (this.channel) {
       const channelToClose = this.channel;
       this.channel = null;
-      // Send quick departure signal if still active
-      channelToClose.send({
-        type: 'broadcast',
-        event: 'PLAYER_DISCONNECTED',
-        payload: { playerId: this.localPlayer?.id },
-      }).catch(() => {});
+
+      // Broadcast explicit close signal if we were in a game
+      if (this.gameStarted) {
+        channelToClose.send({
+          type: 'broadcast',
+          event: 'PLAYER_DISCONNECTED',
+          payload: { playerId: this.localPlayer?.id, explicitClose: true },
+        }).catch(() => {});
+      }
 
       const supabase = getSupabaseClient();
       if (supabase) {
@@ -409,6 +472,7 @@ export class MultiplayerManager {
         channelToClose.unsubscribe();
       }
     }
+
     this.roomCode = '';
     this.opponentPlayer = null;
     this.gameStarted = false;

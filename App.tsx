@@ -31,6 +31,7 @@ const App: React.FC = () => {
   // Multiplayer State
   const [isMultiplayer, setIsMultiplayer] = useState(false);
   const isMultiplayerRef = useRef(false);
+  const gameStateRef = useRef<GameState | null>(null);
   const [roomCode, setRoomCode] = useState('');
   const [activeEmote, setActiveEmote] = useState<{ emote: string; senderName: string } | null>(null);
   const [opponentDisconnected, setOpponentDisconnected] = useState(false);
@@ -38,6 +39,10 @@ const App: React.FC = () => {
   useEffect(() => {
     isMultiplayerRef.current = isMultiplayer;
   }, [isMultiplayer]);
+
+  useEffect(() => {
+    gameStateRef.current = gameState;
+  }, [gameState]);
 
   // AI Mode State
   const aiTurnTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -287,6 +292,11 @@ const App: React.FC = () => {
       onStateSync: (syncedState) => {
         handleAction({ type: 'UPDATE_STATE', payload: syncedState });
       },
+      onRequestSync: () => {
+        if (gameStateRef.current) {
+          multiplayerService.sendStateSync(gameStateRef.current);
+        }
+      },
       onOpponentDisconnected: () => {
         setOpponentDisconnected(true);
         setGameState(prev => {
@@ -295,12 +305,12 @@ const App: React.FC = () => {
             ...prev,
             winner: myId,
             phase: 'end',
-            log: ['The other player has disconnected. The game has ended.', ...prev.log],
+            log: ['The other player has closed or reloaded the game. The match has ended.', ...prev.log],
             notifications: [
               {
                 id: 'disc_' + Date.now(),
                 type: 'error',
-                message: 'The other player has disconnected. The game has ended.'
+                message: 'The other player has closed or reloaded the game. You win by forfeit!'
               },
               ...prev.notifications
             ]

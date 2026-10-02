@@ -845,7 +845,7 @@ export const Game: React.FC<GameProps> = ({
               Opponent Disconnected
             </h2>
             <p className="text-xs md:text-sm text-stone-300 leading-relaxed">
-              The other player has disconnected or reloaded. The multiplayer match has ended!
+              The other player has closed or reloaded the game. The multiplayer match has ended! You win by forfeit.
             </p>
             {onExit && (
               <button
