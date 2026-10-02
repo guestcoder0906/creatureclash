@@ -46,9 +46,9 @@ export const CARDS: Record<string, CardDef> = {
     description: "Deal 2 damage to opponent."
   },
   [CardId.Camouflage]: {
-    id: CardId.Camouflage, name: "Camouflage", type: CardType.Physical, abilityStatus: AbilityStatus.None,
+    id: CardId.Camouflage, name: "Camouflage", type: CardType.Ability, abilityStatus: AbilityStatus.None,
     creatureTypes: 'All', habitats: 'All', staminaCost: 0,
-    description: "Flip coin. Heads = successfully camouflaged, opponent cannot attack until they flip heads at start of their turn.",
+    description: "Active Ability (2 Uses): Flip coin. Heads = Camouflaged (opponent attacks have 50% chance to miss you). Removes 1 use per activation.",
     maxCharges: 2
   },
   [CardId.Whiskers]: {

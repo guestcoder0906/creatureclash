@@ -111,7 +111,7 @@ export const DeckBuilder: React.FC<DeckBuilderProps> = ({
     );
     const defenses = compatibleCards.filter(c =>
       !c.isUpgrade &&
-      (c.id === CardId.StrongBuild || c.id === CardId.Fur || c.id === CardId.ArmoredScales || c.id === CardId.SpikyBody || c.id === CardId.PoisonSkin || c.id === CardId.BarbedQuills || c.id === CardId.ArmoredExoskeleton || c.id === CardId.Camouflage || c.id === CardId.CamouflageWater)
+      (c.id === CardId.StrongBuild || c.id === CardId.Fur || c.id === CardId.ArmoredScales || c.id === CardId.SpikyBody || c.id === CardId.PoisonSkin || c.id === CardId.BarbedQuills || c.id === CardId.ArmoredExoskeleton || c.id === CardId.CamouflageWater)
     );
     const abilities = compatibleCards.filter(c =>
       !c.isUpgrade &&

@@ -61,7 +61,7 @@ export enum CardId {
   VenomousFangs = 'venomous_fangs',
   CrushingWeight = 'crushing_weight',
   Amphibious = 'amphibious',
-  Camouflage = 'camouflage', // Moved to Physical
+  Camouflage = 'camouflage', // Ability (2 Uses)
   Leech = 'leech',
 
   // Abilities

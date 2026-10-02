@@ -41,9 +41,9 @@ export const createCustomPlayer = (
     [deck[i], deck[j]] = [deck[j], deck[i]];
   }
 
-  // Draw starting hand of 4 cards from the 10 cards
+  // Draw starting hand of 3 cards always
   const hand: CI[] = [];
-  const startHandCount = Math.min(4, deck.length);
+  const startHandCount = Math.min(3, deck.length);
   for (let i = 0; i < startHandCount; i++) {
     hand.push(deck.shift()!);
   }
@@ -83,7 +83,7 @@ export const generateRandomAiDeck = (
   // Defenses and Passives
   const defenses = allCardDefs.filter(c =>
     !c.isUpgrade &&
-    (c.id === CID.StrongBuild || c.id === CID.Fur || c.id === CID.ArmoredScales || c.id === CID.SpikyBody || c.id === CID.PoisonSkin || c.id === CID.BarbedQuills || c.id === CID.ArmoredExoskeleton || c.id === CID.Camouflage || c.id === CID.CamouflageWater)
+    (c.id === CID.StrongBuild || c.id === CID.Fur || c.id === CID.ArmoredScales || c.id === CID.SpikyBody || c.id === CID.PoisonSkin || c.id === CID.BarbedQuills || c.id === CID.ArmoredExoskeleton || c.id === CID.CamouflageWater)
   );
 
   // Active abilities and specials
@@ -151,25 +151,18 @@ export const createPlayer = (id: string, name: string): PS => {
   let finalHp = hp;
   
   const hand: CI[] = [];
-  const remainingDeck: CI[] = [];
+  const remainingDeck: CI[] = [...deck];
 
-  const physicals = deck.filter(c => CARDS[c.defId].type === CType.Physical);
-  const abilities = deck.filter(c => CARDS[c.defId].type === CType.Ability || CARDS[c.defId].type === CType.Special);
-  
-  // Start Game: 3 Physicals, 3 Abilities/Special in Hand
-  for(let i=0; i<3; i++) {
-    if(physicals.length > 0) hand.push(physicals.shift()!);
-  }
-  for(let i=0; i<3; i++) {
-    if(abilities.length > 0) hand.push(abilities.shift()!);
-  }
-
-  remainingDeck.push(...physicals, ...abilities);
-  
   // Shuffle Deck
   for (let i = remainingDeck.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [remainingDeck[i], remainingDeck[j]] = [remainingDeck[j], remainingDeck[i]];
+  }
+
+  // Draw starting hand of 3 cards always
+  const startHandCount = Math.min(3, remainingDeck.length);
+  for (let i = 0; i < startHandCount; i++) {
+    hand.push(remainingDeck.shift()!);
   }
 
   return {
@@ -396,16 +389,6 @@ export const gameReducer = (state: GS, action: GA): GS => {
         
         // PHYSICAL ATTACK LOGIC
         if (def.type === CType.Physical) {
-            if (def.id === CID.Camouflage) {
-                 if (performCoinFlip('Camouflage', getRNG(rng, rngIndex++), p.id)) {
-                     addStatus(p, { type: 'Camouflaged', duration: 100 });
-                     log(`${p.name} is Camouflaged.`);
-                     notify("Camouflaged!", 'success');
-                 } else {
-                     notify("Camouflage failed.", 'warning');
-                 }
-                 return;
-            }
             if (def.id === CID.SwimFast) {
                  if (newState.habitat === H.Water) {
                     const isImmobilized = target.statuses.some(s => s.type === 'Grappled' || s.type === 'Stuck');
@@ -533,6 +516,18 @@ export const gameReducer = (state: GS, action: GA): GS => {
                      notify("No move to mimic.", 'warning');
                  }
                  return;
+            }
+
+            if (def.id === CID.Camouflage) {
+                if (performCoinFlip('Camouflage', getRNG(rng, rngIndex++), p.id)) {
+                    addStatus(p, { type: 'Camouflaged', duration: 100 });
+                    log(`${p.name} used Camouflage and is now Camouflaged (50% evasion)!`);
+                    notify("Camouflaged! (50% Miss Chance)", 'success');
+                } else {
+                    log(`${p.name} tried to Camouflage, but the coin flip was Tails.`);
+                    notify("Camouflage failed (Tails).", 'warning');
+                }
+                return;
             }
 
             if (def.id === CID.ShortBurst) { 
@@ -1026,6 +1021,9 @@ export const gameReducer = (state: GS, action: GA): GS => {
       }
 
       p.hand.splice(cardIdx, 1);
+      if (card.charges === undefined && def.maxCharges) {
+        card.charges = def.maxCharges;
+      }
       p.formation.push(card);
       p.cardsPlayedThisTurn++;
       
@@ -1292,6 +1290,19 @@ export const gameReducer = (state: GS, action: GA): GS => {
              if (idx !== -1) {
                  p.hand.splice(idx, 1);
                  p.discard.push(cardInstance);
+             }
+        } else if (cardInstance.charges !== undefined) {
+             // Card has limited charges/uses (e.g., Camouflage with max 2 uses)
+             cardInstance.charges -= 1;
+             log(`${def.name} used 1 charge (${cardInstance.charges} use${cardInstance.charges === 1 ? '' : 's'} remaining).`);
+             if (cardInstance.charges <= 0) {
+                 const idx = p.formation.findIndex(c => c.instanceId === cardInstance.instanceId);
+                 if (idx !== -1) {
+                     p.formation.splice(idx, 1);
+                     p.discard.push(cardInstance);
+                     log(`${def.name} reached 0 uses and was discarded.`);
+                     notify(`${def.name} depleted (0 uses left)`, 'info');
+                 }
              }
         } else if (def.abilityStatus === AS.ConsumableImpact) {
              const idx = p.formation.findIndex(c => c.instanceId === cardInstance.instanceId);

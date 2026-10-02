@@ -21,7 +21,7 @@ const ACTIVE_PHYSICALS = [
   CardId.BigClaws, CardId.StrongTail, CardId.DeathRoll, 
   CardId.GraspingTalons, CardId.DiveBomb, CardId.PiercingBeak, 
   CardId.VenomousFangs, CardId.CrushingWeight, CardId.Leech,
-  CardId.Camouflage, CardId.SwimFast
+  CardId.SwimFast
 ];
 
 const ACTIVE_ABILITIES = [
@@ -30,7 +30,7 @@ const ACTIVE_ABILITIES = [
   CardId.Rage, CardId.TerritorialDisplay, CardId.ExhaustingRoar, CardId.EnhancedSmell, 
   CardId.Copycat, CardId.Agile, CardId.Freeze, CardId.ApexEvolution,
   CardId.ShortBurst, CardId.Dig, CardId.Roar, CardId.Flight, CardId.Mimicry,
-  CardId.StandOnHindLegs, CardId.AmbushAttack
+  CardId.StandOnHindLegs, CardId.AmbushAttack, CardId.Camouflage
 ];
 
 const NotificationToast: React.FC<{ note: GameNotification, onDismiss: () => void }> = ({ note, onDismiss }) => {
@@ -1035,7 +1035,7 @@ export const Game: React.FC<GameProps> = ({
                  className={`rounded-lg sm:rounded-xl min-h-[44px] py-1.5 sm:py-2.5 md:py-3 font-black text-[10px] sm:text-xs md:text-sm transition-all active:scale-95 disabled:opacity-30 disabled:scale-100 flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1 cursor-pointer ${isSelectedInFormation && selectedDef?.type === CardType.Physical && !isAttackBlocked && hasEnoughAttackStamina ? 'bg-red-600 text-white hover:bg-red-500 shadow-[0_0_15px_rgba(220,38,38,0.4)]' : 'bg-stone-800 text-stone-500'}`}
                >
                  <span>⚔️</span>
-                 <span className="truncate">{isSelectedInFormation && selectedDef?.type === CardType.Physical && isAttackBlocked ? 'ATTACKED' : (selectedDef?.id === CardId.Camouflage || selectedDef?.id === CardId.SwimFast) ? 'ACTION' : 'ATTACK'}</span>
+                 <span className="truncate">{isSelectedInFormation && selectedDef?.type === CardType.Physical && isAttackBlocked ? 'ATTACKED' : (selectedDef?.id === CardId.SwimFast) ? 'ACTION' : 'ATTACK'}</span>
                </button>
 
                <button 

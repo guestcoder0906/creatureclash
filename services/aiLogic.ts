@@ -436,6 +436,15 @@ export const computeNextAiAction = (state: GameState, aiId: string): GameAction 
                     else score += 10;
                 }
 
+                // Camouflage: 50% miss chance, max 2 uses
+                if (def.id === CardId.Camouflage) {
+                    if (!ai.statuses.some(s => s.type === 'Camouflaged')) {
+                        score += 28;
+                    } else {
+                        score -= 20;
+                    }
+                }
+
                 // Roar: stops opponent attack
                 if (def.id === CardId.Roar) {
                     if (!opponent.hasAttackedThisTurn && opponent.hp > 3) score += 26;
